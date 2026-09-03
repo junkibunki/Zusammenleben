@@ -3,6 +3,29 @@
 Notizen für zukünftige Sessions. Ergänzt das [README](README.md) (das erklärt Setup und
 Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 
+## Workflow
+
+### Review vor jedem Commit
+
+* **Vor dem Committen muss ein unabhängiger Subagent ohne Vorwissen das Entwickelte
+  reviewen.**
+* Der Agent bekommt **nur eine kurze Einleitung zur Anforderung an das Feature** — nicht,
+  was umgesetzt wurde, nicht welche Dateien betroffen sind, keine Begründungen. Er soll
+  unvoreingenommen gegen die Anforderung prüfen, nicht die eigene Erzählung bestätigen.
+* **Nur committen, wenn der Agent grünes Licht gibt.** Bei Findings: erst beheben, dann
+  erneut reviewen lassen.
+
+### Pitfalls dokumentieren
+
+* **Wenn du bei der Entwicklung in einen Pitfall trittst, dokumentiere ihn** — in diesem
+  File, im passenden Abschnitt weiter unten.
+* Gemeint ist alles, was Zeit gekostet hat, weil es nicht offensichtlich war: eine
+  Fehlermeldung, die in die Irre führt, eine API, die sich anders verhält als erwartet,
+  ein Tool-/Umgebungsproblem, das wie ein Bug im Code aussieht.
+* Notiere **Symptom und Ursache**, nicht nur die Lösung — beim nächsten Mal erkennt man
+  den Fall am Symptom wieder.
+* Kein Pitfall ist: was der Code oder die git-History ohnehin schon zeigt.
+
 ## Struktur
 
 ```
