@@ -172,6 +172,36 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 Dann muss `/opt/einkauf` diesem User gehören.
 
+### Automatisches Deployment per GitHub Actions
+
+`.github/workflows/deploy.yml` baut bei jedem Push auf `main` das Frontend und lädt
+`pb_public/` und `pb_migrations/` nach `/opt/einkauf` – der manuelle `rsync` oben ist
+danach nur noch der Weg für den allerersten Aufbau.
+
+Einmalig einzurichten:
+
+1. **Das PocketBase-Binary manuell auf den Server legen** (`/opt/einkauf/pocketbase`,
+   Linux-Release, `chmod +x`). Der Workflow fasst es bewusst nicht an: ein
+   PocketBase-Upgrade soll nicht als Nebenwirkung eines Frontend-Pushs passieren.
+2. **systemd-Unit einrichten** (siehe oben) – `WorkingDirectory` muss zum `target` im
+   Workflow passen (`/opt/einkauf`).
+3. **Repository-Secrets** unter *Settings → Secrets and variables → Actions* anlegen:
+
+| Secret           | Inhalt                                                       |
+| ---------------- | ------------------------------------------------------------ |
+| `SSH_HOST`       | IP oder Hostname des VPS                                     |
+| `SSH_USER`       | SSH-Benutzer (`root`, oder der Service-User)                  |
+| `SSH_KEY`        | privater SSH-Key, vollständig inkl. `-----BEGIN`-Zeile        |
+| `SSH_PASSPHRASE` | nur falls der Key eine hat, sonst leer lassen                 |
+
+Was der Workflow tut: alten Build-Output löschen (scp löscht nichts von selbst),
+hochladen, Dienst stoppen, `pb_data/` nach `pb_data.bak/` sichern, Dienst starten und
+`/api/health` pollen. Die Sicherung vor dem Neustart ist kein Luxus – beim Start laufen
+die Migrationen automatisch gegen die Produktionsdatenbank. Es wird genau **eine**
+Sicherung vorgehalten, jeder Deploy überschreibt die vorherige.
+
+`pb_data/` selbst wird nie hochgeladen und nie gelöscht.
+
 ### Erste Schritte nach dem Deploy
 
 1. `https://einkauf.MEINEDOMAIN.de/_/` öffnen, Admin-Account anlegen.

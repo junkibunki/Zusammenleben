@@ -5,6 +5,13 @@ on:
     branches:
       - main
 
+# Zwei gleichzeitige Deploys wuerden sich beim Upload in die Quere kommen.
+concurrency:
+  group: deploy
+
+env:
+  TARGET: /opt/einkauf
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,8 +19,36 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Dateien (Binary + pb_public) auf den Strato-Server kopieren
-      - name: Copy files via SCP
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # pb_public/ ist gitignored und entsteht erst hier.
+      - name: Frontend bauen
+        run: ./build.sh
+
+      # scp loescht nichts. Ohne das hier sammeln sich alte Hash-Assets in
+      # pb_public/_app/ und geloeschte Migrationen bleiben liegen.
+      # Nur pb_public/ -- reiner Build-Output, waehrend des Uploads liefert
+      # die App fuer ein paar Sekunden 404. pb_data/ wird nicht angefasst.
+      - name: Alten Build-Output entfernen
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          port: 22
+          script: rm -rf ${{ env.TARGET }}/pb_public
+
+      # Nur diese beiden Ordner. Das Binary wird bewusst nicht mitdeployt
+      # (Linux-Release liegt einmalig auf dem Server), pb_data/ ist die
+      # Datenbank. Kein `rm: true` -- das wuerde das Zielverzeichnis
+      # inklusive pb_data/ vor dem Upload loeschen.
+      - name: pb_public + Migrationen hochladen
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -21,11 +56,15 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
-          source: "pocketbase,pb_public/" # 
-          target: "/var/www/mein-projekt"
+          source: "pb/pb_public/*,pb/pb_migrations/*"
+          target: ${{ env.TARGET }}
+          strip_components: 1 # schneidet das fuehrende pb/ weg
 
-      # 2. Per SSH Rechte vergeben und den systemd-Service neu starten
-      - name: Execute SSH Commands on Strato
+      # Beim Start laufen die Migrationen aus pb_migrations/ automatisch gegen
+      # die Produktions-DB -- deshalb vorher eine Kopie ziehen, und zwar bei
+      # gestopptem Dienst (SQLite im WAL-Modus laesst sich sonst inkonsistent
+      # kopieren). Es wird genau eine Sicherung vorgehalten.
+      - name: Sichern und Service neu starten
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -34,11 +73,27 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
           script: |
-            # Ausführrechte für das Binary setzen
-            chmod +x /var/www/mein-projekt/pocketbase
-            
-            # PocketBase Service neu starten, um Änderungen zu übernehmen
-            sudo systemctl restart pocketbase
-            
-            # Status zur Kontrolle ausgeben
-            sudo systemctl status pocketbase --no-pager
+            set -e
+            # Funktioniert als root wie auch mit eigenem Service-User.
+            SUDO=""
+            [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+
+            $SUDO systemctl stop pocketbase
+            $SUDO rm -rf ${{ env.TARGET }}/pb_data.bak
+            $SUDO cp -a ${{ env.TARGET }}/pb_data ${{ env.TARGET }}/pb_data.bak
+            $SUDO systemctl start pocketbase
+
+            # `systemctl is-active` meldet bei Type=simple schon "active",
+            # bevor PocketBase ueberhaupt gebootet hat -- eine gescheiterte
+            # Migration faellt damit nicht auf. Deshalb die API fragen.
+            for i in $(seq 1 10); do
+              if curl -fsS http://127.0.0.1/api/health > /dev/null; then
+                echo "PocketBase antwortet."
+                exit 0
+              fi
+              sleep 2
+            done
+
+            echo "PocketBase antwortet nach 20s nicht:"
+            $SUDO systemctl status pocketbase --no-pager || true
+            exit 1
