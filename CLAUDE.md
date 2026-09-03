@@ -79,6 +79,15 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   Subscription feuert ein `create`-Event für denselben Record — ohne `findIndex`-Check
   steht der Eintrag doppelt in der Liste.
 * **`pb.authStore.record`**, nicht `.model` (seit SDK 0.22).
+* **`expand` kommt leer zurück, wenn die View-Rule der Zielcollection zumacht.** Symptom:
+  `record.expand` ist `{}`, kein Fehler, kein Log. Ursache bei `users`: die Standard-Rule
+  `id = @request.auth.id` lässt nur den eigenen Datensatz durch. Migration
+  `1756000002` öffnet die ViewRule für Eingeloggte; die ListRule bleibt eng.
+* **`expand` muss an *jeden* Call**, sonst fehlt der Name genau im ungetesteten Pfad:
+  `getFullList({ expand })`, `create(data, { expand })`, `update(id, data, { expand })`
+  und — leicht übersehen — `subscribe('*', cb, { expand })` als **drittes** Argument.
+* Beim optimistischen Toggle auch `item.expand.done_by` lokal setzen (der eigene User
+  steht im `authStore`), sonst springt der Name erst mit dem Realtime-Event nach.
 * Optimistische Updates (Toggle, Delete) rollen bei einem Fehler den vorherigen Zustand
   zurück; der Fehler landet in `store.error`.
 
@@ -113,6 +122,9 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
 * **Umlaute in Bash-`curl`-Payloads werden auf Windows zerlegt** und PocketBase antwortet
   mit einem nichtssagenden `400`. Für Requests mit Umlauten (z.B. `category:"Obst/Gemüse"`)
   `node -e "fetch(...)"` benutzen, Token per Env-Variable übergeben.
+* **Nach dem Löschen von `pb_data/` sieht die App eingeloggt aus, zeigt aber eine leere
+  Liste.** Der Token im localStorage überlebt den DB-Reset, ist gegen die neue DB aber
+  ungültig — jeder Request läuft in ein 401. Einmal abmelden, neu anmelden.
 * Testdaten liegen in `pb/pb_data/` — zum Zurücksetzen einfach den Ordner löschen und
   den Superuser neu anlegen.
 

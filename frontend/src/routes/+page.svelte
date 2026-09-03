@@ -7,9 +7,25 @@
 		toggleItem,
 		deleteItem,
 		clearDone,
+		userLabel,
+		formatWhen,
 		CATEGORIES,
 		DEFAULT_CATEGORY
 	} from '$lib/items.svelte.js';
+
+	// "Anna · heute 19:41 · gekauft von Papa" -- leere Teile fallen raus.
+	function metaFor(item) {
+		const parts = [];
+		const added = userLabel(item.expand?.added_by);
+		const when = formatWhen(item.created);
+		if (added) parts.push(added);
+		if (when) parts.push(when);
+
+		const buyer = userLabel(item.expand?.done_by);
+		if (item.done && buyer) parts.push(`gekauft von ${buyer}`);
+
+		return parts.join(' · ');
+	}
 
 	let draft = $state('');
 	let category = $state(DEFAULT_CATEGORY);
@@ -85,6 +101,7 @@
 			<section class="group">
 				<h2>{group.category}</h2>
 				{#each group.items as item (item.id)}
+					{@const meta = metaFor(item)}
 					<div class="row">
 						<button class="main" onclick={() => toggleItem(item)}>
 							<span class="box"></span>
@@ -92,6 +109,7 @@
 								<span>{item.name}</span>
 								{#if item.quantity}<span class="qty"> · {item.quantity}</span>{/if}
 								{#if item.note}<br /><span class="qty">{item.note}</span>{/if}
+								{#if meta}<span class="meta">{meta}</span>{/if}
 							</span>
 						</button>
 						<button class="del" aria-label="Löschen" onclick={() => deleteItem(item)}>×</button>
@@ -110,12 +128,14 @@
 
 			{#if showDone}
 				{#each done as item (item.id)}
+					{@const meta = metaFor(item)}
 					<div class="row is-done">
 						<button class="main" onclick={() => toggleItem(item)}>
 							<span class="box">✓</span>
 							<span class="label">
 								<span>{item.name}</span>
 								{#if item.quantity}<span class="qty"> · {item.quantity}</span>{/if}
+								{#if meta}<span class="meta">{meta}</span>{/if}
 							</span>
 						</button>
 						<button class="del" aria-label="Löschen" onclick={() => deleteItem(item)}>×</button>

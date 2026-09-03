@@ -36,7 +36,7 @@ cd pb && ./pocketbase serve
 
 **3. Admin-Account anlegen** unter <http://127.0.0.1:8090/_/> (oder per CLI:
 `./pocketbase superuser upsert admin@example.com EINPASSWORT`), danach dort die
-Familien-Accounts in der Collection `users` anlegen – Selbstregistrierung ist per
+Familien-Accounts in der Collection `users` anlegen (Feld `name` ausfüllen) – Selbstregistrierung ist per
 Migration abgeschaltet, ein `POST /api/collections/users/records` ohne Admin-Token
 antwortet mit `403`.
 
@@ -81,6 +81,21 @@ Bewusst grob – innerhalb einer Familie braucht es keine feingranularen Rechte.
 
 `users.createRule` wird per zweiter Migration auf `null` gesetzt: niemand kann sich
 selbst registrieren, Accounts legt der Admin an.
+
+`users.viewRule` steht per dritter Migration auf `@request.auth.id != ""`. Ohne das
+liefert `expand=added_by,done_by` leere Objekte – PocketBase prüft beim Expand die
+ViewRule der Zielcollection, und die lässt per Default nur den eigenen Datensatz durch.
+`listRule` bleibt bewusst eng (`users` soll nicht komplett auflistbar sein), Ändern
+bleibt auf den eigenen Account beschränkt.
+
+**Beim Anlegen eines Accounts das Feld `name` ausfüllen.** Es ist das einzige Feld, das
+für die anderen Familienmitglieder sichtbar ist – `email` liefert PocketBase nur bei
+gesetztem `emailVisibility` bzw. für den eigenen Account aus. Ohne Namen steht in der
+Zeile „Jemand“.
+
+Jede Zeile zeigt darunter klein und ausgegraut, wer den Eintrag wann hinzugefügt hat
+(`added_by` + `created`); bei erledigten Einträgen zusätzlich „gekauft von …“
+(`done_by`). Das Datum ist am selben Tag „heute 19:41“, sonst „3. Sept. 19:41“.
 
 ---
 
@@ -160,7 +175,7 @@ Dann muss `/opt/einkauf` diesem User gehören.
 ### Erste Schritte nach dem Deploy
 
 1. `https://einkauf.MEINEDOMAIN.de/_/` öffnen, Admin-Account anlegen.
-2. In der Collection `users` die Familien-Accounts anlegen (E-Mail + Passwort).
+2. In der Collection `users` die Familien-Accounts anlegen (E-Mail + Passwort + **Name**).
 3. App unter `https://einkauf.MEINEDOMAIN.de/` öffnen und auf dem Homescreen installieren.
 
 ---

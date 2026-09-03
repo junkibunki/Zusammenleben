@@ -267,3 +267,11 @@ button {
 .login button[disabled] {
 	opacity: 0.6;
 }
+
+.label .meta {
+	display: block;
+	margin-top: 2px;
+	color: var(--muted);
+	font-size: 11px;
+	line-height: 1.3;
+}

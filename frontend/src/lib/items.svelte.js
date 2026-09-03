@@ -11,6 +11,43 @@ export const CATEGORIES = [
 
 export const DEFAULT_CATEGORY = 'Sonstiges';
 
+// Relations mitladen, sonst steht in der Zeile nur eine Record-ID.
+const EXPAND = 'added_by,done_by';
+
+/**
+ * Anzeigename eines expandierten Users; leer, wenn die Relation nicht gesetzt ist.
+ * `name` ist fuer alle sichtbar, `email` nur bei `emailVisibility` bzw. beim eigenen
+ * Record -- ohne Fallback stuende bei fremden Accounts ohne Namen gar nichts da.
+ */
+export function userLabel(user) {
+	if (!user) return '';
+	return user.name || user.email?.split('@')[0] || 'Jemand';
+}
+
+/** PocketBase-Zeitstempel ("2026-09-03 19:41:30.123Z") kurz und deutsch. */
+export function formatWhen(value) {
+	if (!value) return '';
+	const date = new Date(String(value).replace(' ', 'T'));
+	if (Number.isNaN(date.getTime())) return '';
+
+	const today = new Date();
+	const sameDay =
+		date.getFullYear() === today.getFullYear() &&
+		date.getMonth() === today.getMonth() &&
+		date.getDate() === today.getDate();
+
+	const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+	if (sameDay) return `heute ${time}`;
+
+	const sameYear = date.getFullYear() === today.getFullYear();
+	const day = date.toLocaleDateString('de-DE', {
+		day: 'numeric',
+		month: 'short',
+		year: sameYear ? undefined : 'numeric'
+	});
+	return `${day} ${time}`;
+}
+
 // Ein einziges reaktives Objekt. Bewusst ein Objekt statt eines exportierten
 // `let`, weil Svelte 5 den Re-Export einer neu zugewiesenen $state-Variablen
 // nicht erlaubt -- und weil so ausschliesslich einzelne Items mutiert werden.
@@ -30,7 +67,7 @@ export function syncItems() {
 	store.error = null;
 
 	pb.collection('items')
-		.getFullList({ sort: 'created' })
+		.getFullList({ sort: 'created', expand: EXPAND })
 		.then((records) => {
 			if (cancelled) return;
 			store.items = records;
@@ -56,7 +93,7 @@ export function syncItems() {
 		} else if (e.action === 'delete') {
 			if (idx > -1) items.splice(idx, 1);
 		}
-	});
+	}, { expand: EXPAND });
 
 	return () => {
 		cancelled = true;
@@ -68,32 +105,42 @@ export async function addItem(name, category = DEFAULT_CATEGORY) {
 	const trimmed = name.trim();
 	if (!trimmed) return;
 
-	const record = await pb.collection('items').create({
-		name: trimmed,
-		category: category || DEFAULT_CATEGORY,
-		done: false,
-		added_by: pb.authStore.record?.id ?? ''
-	});
+	const record = await pb.collection('items').create(
+		{
+			name: trimmed,
+			category: category || DEFAULT_CATEGORY,
+			done: false,
+			added_by: pb.authStore.record?.id ?? ''
+		},
+		{ expand: EXPAND }
+	);
 
 	if (!store.items.some((i) => i.id === record.id)) store.items.push(record);
 }
 
 export async function toggleItem(item) {
-	const before = { done: item.done, done_by: item.done_by };
+	const me = pb.authStore.record ?? null;
+	if (!me) return; // ohne Auth wuerde der Request ohnehin scheitern
+	const before = { done: item.done, done_by: item.done_by, expand: item.expand };
 	const done = !item.done;
 
-	// Optimistisch: erst lokal, dann Server.
+	// Optimistisch: erst lokal, dann Server. Der eigene User steht schon im
+	// authStore, also kann auch der Name sofort stehen.
 	item.done = done;
-	item.done_by = done ? (pb.authStore.record?.id ?? '') : '';
+	item.done_by = done ? me.id : '';
+	item.expand = { ...(item.expand ?? {}), done_by: done ? me : undefined };
 
 	try {
-		await pb.collection('items').update(item.id, {
-			done: item.done,
-			done_by: item.done_by
-		});
+		const record = await pb.collection('items').update(
+			item.id,
+			{ done: item.done, done_by: item.done_by },
+			{ expand: EXPAND }
+		);
+		item.expand = record.expand ?? {};
 	} catch (err) {
 		item.done = before.done;
 		item.done_by = before.done_by;
+		item.expand = before.expand;
 		store.error = err?.message ?? 'Speichern fehlgeschlagen';
 	}
 }
