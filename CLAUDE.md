@@ -49,6 +49,7 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
 │   ├── pb_data/                   # gitignored, die SQLite-DB
 │   └── pb_public/                 # gitignored, Build-Output
+├── .github/workflows/deploy.yml   # Build + Deploy auf den VPS bei Push auf main
 ├── build.sh                       # frontend -> pb/pb_public
 └── README.md
 ```
@@ -127,6 +128,30 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   ungültig — jeder Request läuft in ein 401. Einmal abmelden, neu anmelden.
 * Testdaten liegen in `pb/pb_data/` — zum Zurücksetzen einfach den Ordner löschen und
   den Superuser neu anlegen.
+
+## Deployment (GitHub Actions -> STRATO-VPS)
+
+* **`cp: cannot stat '<TARGET>/pb_data'` beim ersten Deploy.** `pb_data/` entsteht erst
+  beim ersten PocketBase-Start, existiert auf einem frischen Server also nicht. Wenn das
+  Backup-Kommando unter `set -e` daran scheitert, *nachdem* der Dienst gestoppt wurde,
+  bleibt der Server gestoppt zurück. Deshalb: Sicherung nur `if [ -d ... ]`, und ein
+  `trap '... systemctl start ...' EXIT` über den ganzen kritischen Abschnitt.
+* **Der Deploy lädt hoch, aber nichts ändert sich.** Symptom: Workflow grün, App zeigt
+  den alten Stand. Ursache: `TARGET` im Workflow ≠ `WorkingDirectory` der systemd-Unit —
+  PocketBase sucht `pb_public/`, `pb_migrations/` und `pb_data/` relativ dazu. Prüfen mit
+  `systemctl show pocketbase -p WorkingDirectory`.
+* **`curl -fsS http://127.0.0.1/api/health` als Healthcheck taugt nicht.** Läuft
+  PocketBase mit `--https`, antwortet Port 80 mit einem 301; `curl -f` wertet das als
+  Erfolg, ohne die API je erreicht zu haben. `-L` folgt dem Redirect, `-k` akzeptiert das
+  Domain-Zertifikat auf `127.0.0.1`.
+* **`systemctl is-active` sagt bei `Type=simple` nichts aus.** Die Unit ist "active",
+  sobald der Prozess geforkt ist — eine gescheiterte Migration sieht man daran nicht.
+* **`set -e` bricht bei `[ "$(id -u)" -ne 0 ] && SUDO="sudo"` *nicht* ab**, auch wenn der
+  Test fehlschlägt: errexit gilt nicht für Kommandos in einer `&&`-Liste außer dem
+  letzten. Das Idiom ist also sicher.
+* **Beim Umschwenken erst das Neue reinlegen, dann das Alte löschen.** `rm -rf pb_public
+  && mv .deploy/pb_public pb_public` lässt bei einem gescheiterten `mv` einen laufenden
+  Dienst ganz ohne Frontend zurück.
 
 ## Sonstiges
 

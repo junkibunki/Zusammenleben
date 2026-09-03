@@ -120,7 +120,7 @@ Ist Port 80 auch nur an einer der beiden Stellen zu, bekommt PocketBase kein Zer
 ### Dateien hochladen
 
 ```bash
-rsync -av --exclude pb_data pb/ root@SERVER:/opt/einkauf/
+rsync -av --exclude pb_data pb/ root@SERVER:/var/www/mein-projekt/
 ```
 
 `pb_data/` bleibt auf dem Server, das ist die Datenbank.
@@ -145,8 +145,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/einkauf
-ExecStart=/opt/einkauf/pocketbase serve --http=0.0.0.0:80 --https=0.0.0.0:443 einkauf.MEINEDOMAIN.de
+WorkingDirectory=/var/www/mein-projekt
+ExecStart=/var/www/mein-projekt/pocketbase serve --http=0.0.0.0:80 --https=0.0.0.0:443 einkauf.MEINEDOMAIN.de
 Restart=always
 RestartSec=5
 LimitNOFILE=4096
@@ -170,22 +170,29 @@ Group=pocketbase
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 ```
 
-Dann muss `/opt/einkauf` diesem User gehören.
+Dann muss `/var/www/mein-projekt` diesem User gehören.
 
 ### Automatisches Deployment per GitHub Actions
 
 `.github/workflows/deploy.yml` baut bei jedem Push auf `main` das Frontend und lädt
-`pb_public/` und `pb_migrations/` nach `/opt/einkauf` – der manuelle `rsync` oben ist
-danach nur noch der Weg für den allerersten Aufbau.
+`pb_public/` und `pb_migrations/` auf den Server. Der manuelle `rsync` oben wird danach
+nicht mehr gebraucht.
 
 Einmalig einzurichten:
 
-1. **Das PocketBase-Binary manuell auf den Server legen** (`/opt/einkauf/pocketbase`,
-   Linux-Release, `chmod +x`). Der Workflow fasst es bewusst nicht an: ein
-   PocketBase-Upgrade soll nicht als Nebenwirkung eines Frontend-Pushs passieren.
-2. **systemd-Unit einrichten** (siehe oben) – `WorkingDirectory` muss zum `target` im
-   Workflow passen (`/opt/einkauf`).
-3. **Repository-Secrets** unter *Settings → Secrets and variables → Actions* anlegen:
+1. **Das PocketBase-Binary manuell auf den Server legen** (Linux-Release, `chmod +x`).
+   Der Workflow fasst es bewusst nicht an: ein PocketBase-Upgrade soll nicht als
+   Nebenwirkung eines Frontend-Pushs passieren.
+2. **systemd-Unit einrichten** (siehe oben).
+3. **`TARGET` im Workflow auf das `WorkingDirectory` der Unit setzen.** Die beiden
+   *müssen* übereinstimmen, sonst lädt der Deploy am laufenden Dienst vorbei und nichts
+   ändert sich sichtbar. Nachsehen mit:
+
+   ```bash
+   systemctl show pocketbase -p WorkingDirectory
+   ```
+
+4. **Repository-Secrets** unter *Settings → Secrets and variables → Actions* anlegen:
 
 | Secret           | Inhalt                                                       |
 | ---------------- | ------------------------------------------------------------ |
@@ -194,13 +201,34 @@ Einmalig einzurichten:
 | `SSH_KEY`        | privater SSH-Key, vollständig inkl. `-----BEGIN`-Zeile        |
 | `SSH_PASSPHRASE` | nur falls der Key eine hat, sonst leer lassen                 |
 
-Was der Workflow tut: alten Build-Output löschen (scp löscht nichts von selbst),
-hochladen, Dienst stoppen, `pb_data/` nach `pb_data.bak/` sichern, Dienst starten und
-`/api/health` pollen. Die Sicherung vor dem Neustart ist kein Luxus – beim Start laufen
-die Migrationen automatisch gegen die Produktionsdatenbank. Es wird genau **eine**
-Sicherung vorgehalten, jeder Deploy überschreibt die vorherige.
+Was der Workflow tut: nach `.deploy/` hochladen, Dienst stoppen, `pb_data/` nach
+`pb_data.bak/` sichern, `pb_public/` durch die neue Version ersetzen und
+`pb_migrations/` ergänzen, Dienst starten, `/api/health` pollen. Erst der letzte Schritt
+fasst den laufenden Stand an – scheitert der Upload, läuft die App unverändert weiter.
+
+Die Sicherung vor dem Neustart ist kein Luxus: beim Start laufen die Migrationen
+automatisch gegen die Produktionsdatenbank. Es wird genau **eine** Sicherung vorgehalten,
+jeder Deploy überschreibt die vorherige. Existiert noch keine `pb_data/` (erster Deploy),
+wird der Schritt übersprungen.
+
+Voraussetzungen auf dem Server: `curl` ist installiert, und wenn der SSH-User **nicht**
+root ist, braucht er passwortloses `sudo` für `systemctl` – die Action läuft ohne TTY,
+eine Passwortabfrage bricht ab.
 
 `pb_data/` selbst wird nie hochgeladen und nie gelöscht.
+
+Eine Sicherung zurückspielen (auf dem Server, als root):
+
+```bash
+T=/var/www/mein-projekt; systemctl stop pocketbase; mv "$T/pb_data" "$T/pb_data.broken"; cp -a "$T/pb_data.bak" "$T/pb_data"; systemctl start pocketbase
+```
+
+Die kaputte Datenbank wird beiseitegelegt, nicht gelöscht – falls die Sicherung doch
+älter ist als gedacht. Aufgeräumt wird von Hand, wenn die App wieder tut.
+
+Achtung: es gibt nur **eine** Sicherung, und der nächste Push überschreibt sie. Wer einen
+Migrationsschaden erst später bemerkt, hat sie dann nicht mehr. Vor riskanten
+Schema-Änderungen also besser eine eigene Kopie wegschreiben.
 
 ### Erste Schritte nach dem Deploy
 

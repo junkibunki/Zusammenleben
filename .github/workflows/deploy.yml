@@ -10,7 +10,9 @@ concurrency:
   group: deploy
 
 env:
-  TARGET: /opt/einkauf
+  # Muss dem WorkingDirectory der systemd-Unit entsprechen:
+  #   systemctl show pocketbase -p WorkingDirectory
+  TARGET: /var/www/mein-projekt
 
 jobs:
   deploy:
@@ -30,11 +32,9 @@ jobs:
       - name: Frontend bauen
         run: ./build.sh
 
-      # scp loescht nichts. Ohne das hier sammeln sich alte Hash-Assets in
-      # pb_public/_app/ und geloeschte Migrationen bleiben liegen.
-      # Nur pb_public/ -- reiner Build-Output, waehrend des Uploads liefert
-      # die App fuer ein paar Sekunden 404. pb_data/ wird nicht angefasst.
-      - name: Alten Build-Output entfernen
+      # Hochgeladen wird nach .deploy/, umgeschwenkt wird erst im letzten
+      # Step. Scheitert der Upload, laeuft die App unveraendert weiter.
+      - name: Staging-Ordner leeren
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -42,7 +42,11 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
-          script: rm -rf ${{ env.TARGET }}/pb_public
+          script: |
+            set -e
+            SUDO=""
+            [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+            $SUDO rm -rf "${{ env.TARGET }}/.deploy"
 
       # Nur diese beiden Ordner. Das Binary wird bewusst nicht mitdeployt
       # (Linux-Release liegt einmalig auf dem Server), pb_data/ ist die
@@ -57,14 +61,14 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
           source: "pb/pb_public/*,pb/pb_migrations/*"
-          target: ${{ env.TARGET }}
+          target: ${{ env.TARGET }}/.deploy
           strip_components: 1 # schneidet das fuehrende pb/ weg
 
       # Beim Start laufen die Migrationen aus pb_migrations/ automatisch gegen
       # die Produktions-DB -- deshalb vorher eine Kopie ziehen, und zwar bei
       # gestopptem Dienst (SQLite im WAL-Modus laesst sich sonst inkonsistent
       # kopieren). Es wird genau eine Sicherung vorgehalten.
-      - name: Sichern und Service neu starten
+      - name: Sichern, umschwenken, Service neu starten
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -72,22 +76,66 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
+          command_timeout: 20m # cp -a einer grossen pb_data darf dauern
           script: |
             set -e
+            T="${{ env.TARGET }}"
+
             # Funktioniert als root wie auch mit eigenem Service-User.
             SUDO=""
             [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
+            # Vor dem Stoppen pruefen, ob ueberhaupt etwas zum Umschwenken da
+            # ist -- sonst steht der Dienst gleich ohne Frontend da.
+            for d in pb_public pb_migrations; do
+              if [ ! -d "$T/.deploy/$d" ]; then
+                echo "Upload unvollstaendig: $T/.deploy/$d fehlt."
+                exit 1
+              fi
+            done
+
+            # Was auch immer zwischen stop und start schiefgeht: der Dienst
+            # darf nicht gestoppt zurueckbleiben.
+            trap '$SUDO systemctl start pocketbase || true' EXIT
+
             $SUDO systemctl stop pocketbase
-            $SUDO rm -rf ${{ env.TARGET }}/pb_data.bak
-            $SUDO cp -a ${{ env.TARGET }}/pb_data ${{ env.TARGET }}/pb_data.bak
+
+            # Beim allerersten Deploy gibt es noch keine Datenbank.
+            # Erst neben die alte Sicherung kopieren, dann umbenennen -- sonst
+            # gibt es ein Fenster ganz ohne gueltige Kopie.
+            if [ -d "$T/pb_data" ]; then
+              $SUDO rm -rf "$T/pb_data.new"
+              $SUDO cp -a "$T/pb_data" "$T/pb_data.new"
+              $SUDO rm -rf "$T/pb_data.bak"
+              $SUDO mv "$T/pb_data.new" "$T/pb_data.bak"
+            else
+              echo "Noch keine Datenbank vorhanden -- erster Deploy, nichts zu sichern."
+            fi
+
+            # pb_public/ ist reiner Build-Output und wird ersetzt, damit sich
+            # keine alten Hash-Assets ansammeln -- aber erst das neue rein,
+            # dann das alte weg. pb_migrations/ wird nur ergaenzt: PocketBase
+            # legt dort serverseitig eigene Migrationen ab.
+            $SUDO rm -rf "$T/pb_public.old"
+            if [ -d "$T/pb_public" ]; then
+              $SUDO mv "$T/pb_public" "$T/pb_public.old"
+            fi
+            $SUDO mv "$T/.deploy/pb_public" "$T/pb_public"
+            $SUDO rm -rf "$T/pb_public.old"
+
+            $SUDO mkdir -p "$T/pb_migrations"
+            $SUDO cp -a "$T/.deploy/pb_migrations/." "$T/pb_migrations/"
+            $SUDO rm -rf "$T/.deploy"
+
             $SUDO systemctl start pocketbase
 
             # `systemctl is-active` meldet bei Type=simple schon "active",
             # bevor PocketBase ueberhaupt gebootet hat -- eine gescheiterte
             # Migration faellt damit nicht auf. Deshalb die API fragen.
+            # -L folgt dem Redirect von Port 80 auf HTTPS, -k akzeptiert das
+            # Domain-Zertifikat auf 127.0.0.1.
             for i in $(seq 1 10); do
-              if curl -fsS http://127.0.0.1/api/health > /dev/null; then
+              if curl -fsSLk http://127.0.0.1/api/health > /dev/null; then
                 echo "PocketBase antwortet."
                 exit 0
               fi
