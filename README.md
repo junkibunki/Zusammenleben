@@ -34,8 +34,15 @@ Benötigt wird **v0.23 oder neuer**, weil die Migrationen die neue JSVM-API nutz
 cd pb && ./pocketbase serve
 ```
 
-**3. Admin-Account anlegen** unter <http://127.0.0.1:8090/_/> (oder per CLI:
-`./pocketbase superuser upsert admin@example.com EINPASSWORT`), danach dort die
+**3. Superuser anlegen** per CLI, in einem **zweiten Terminal** (der Server aus Schritt 2
+läuft im Vordergrund) – seit v0.23 gibt es unter `/_/` keine offene Maske mehr dafür,
+sondern nur einen Einmal-Link mit Token im Serverlog:
+
+```bash
+cd pb && ./pocketbase superuser upsert admin@example.com EINPASSWORT
+```
+
+Danach unter <http://127.0.0.1:8090/_/> anmelden und dort die
 Familien-Accounts in der Collection `users` anlegen (Feld `name` ausfüllen) – Selbstregistrierung ist per
 Migration abgeschaltet, ein `POST /api/collections/users/records` ohne Admin-Token
 antwortet mit `403`.
@@ -120,10 +127,13 @@ Ist Port 80 auch nur an einer der beiden Stellen zu, bekommt PocketBase kein Zer
 ### Dateien hochladen
 
 ```bash
-rsync -av --exclude pb_data pb/ root@SERVER:/var/www/mein-projekt/
+rsync -av --exclude pb_data --exclude "pocketbase*" pb/ root@SERVER:/var/www/mein-projekt/
 ```
 
-`pb_data/` bleibt auf dem Server, das ist die Datenbank.
+`pb_data/` bleibt auf dem Server, das ist die Datenbank. Das Binary bleibt ebenfalls
+außen vor: lokal liegt dort der Build der eigenen Plattform (unter Windows eine `.exe`),
+und den kann Linux nicht ausführen – die Unit scheitert dann mit `status=203/EXEC`. Auf
+den Server gehört das Linux-Release, siehe „Automatisches Deployment" weiter unten.
 
 ### Start mit HTTPS
 
@@ -180,9 +190,26 @@ nicht mehr gebraucht.
 
 Einmalig einzurichten:
 
-1. **Das PocketBase-Binary manuell auf den Server legen** (Linux-Release, `chmod +x`).
-   Der Workflow fasst es bewusst nicht an: ein PocketBase-Upgrade soll nicht als
-   Nebenwirkung eines Frontend-Pushs passieren.
+1. **Zielverzeichnis anlegen und das PocketBase-Binary manuell dorthin legen.** Der
+   Workflow fasst das Binary bewusst nicht an: ein PocketBase-Upgrade soll nicht als
+   Nebenwirkung eines Frontend-Pushs passieren. Passendes **Linux**-Release nehmen
+   (`uname -m`: `x86_64` -> `amd64`, `aarch64` -> `arm64`):
+
+   Beide Blöcke als root ausführen; wer als anderer User arbeitet, setzt jeweils `sudo`
+   davor.
+
+   ```bash
+   apt-get install -y wget unzip
+   ```
+
+   ```bash
+   mkdir -p /var/www/mein-projekt && cd /var/www/mein-projekt && wget https://github.com/pocketbase/pocketbase/releases/download/v0.40.2/pocketbase_0.40.2_linux_amd64.zip && unzip -o -j pocketbase_0.40.2_linux_amd64.zip pocketbase && chmod +x pocketbase && rm pocketbase_0.40.2_linux_amd64.zip
+   ```
+
+   Fehlt das Binary, startet die Unit mit `status=203/EXEC` und der Healthcheck des
+   Deploys läuft in `curl: (7)`. PocketBase selbst loggt dabei nichts — der Prozess ist
+   nie angelaufen. Die Ursache loggt systemd: `journalctl -u pocketbase` zeigt dann
+   `Failed to locate executable ...` bzw. `Failed at step EXEC`.
 2. **systemd-Unit einrichten** (siehe oben).
 3. **`TARGET` im Workflow auf das `WorkingDirectory` der Unit setzen.** Die beiden
    *müssen* übereinstimmen, sonst lädt der Deploy am laufenden Dienst vorbei und nichts
@@ -192,16 +219,38 @@ Einmalig einzurichten:
    systemctl show pocketbase -p WorkingDirectory
    ```
 
-4. **Repository-Secrets** unter *Settings → Secrets and variables → Actions* anlegen:
+4. **SSH-Key-Login einrichten.** Ein VPS kommt in der Regel mit Passwort-Login; die
+   Action kann damit nichts anfangen. Also lokal ein Schlüsselpaar erzeugen (falls noch
+   keins da ist) und den *öffentlichen* Teil auf dem Server hinterlegen:
+
+   ```bash
+   ssh-keygen -t ed25519 -C github-actions -f ~/.ssh/deploy_einkauf
+   ssh-copy-id -i ~/.ssh/deploy_einkauf.pub SSH_USER@SERVER
+   ```
+
+   Unter Windows gibt es `ssh-copy-id` nicht, dort erledigt das eine Zeile in der
+   PowerShell:
+
+   ```powershell
+   type $env:USERPROFILE\.ssh\deploy_einkauf.pub | ssh SSH_USER@SERVER "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+   ```
+
+   Der Key gehört in `~/.ssh/authorized_keys` **des `SSH_USER`** – bei
+   einem Service-User also nicht an den von root. Fehlt der Schritt, scheitert schon der
+   erste Deploy-Step mit `ssh: handshake failed: ... unable to authenticate`. Danach
+   einmal von Hand `ssh -i ~/.ssh/deploy_einkauf SSH_USER@SERVER` testen.
+
+5. **Repository-Secrets** unter *Settings → Secrets and variables → Actions* anlegen:
 
 | Secret           | Inhalt                                                       |
 | ---------------- | ------------------------------------------------------------ |
 | `SSH_HOST`       | IP oder Hostname des VPS                                     |
 | `SSH_USER`       | SSH-Benutzer (`root`, oder der Service-User)                  |
-| `SSH_KEY`        | privater SSH-Key, vollständig inkl. `-----BEGIN`-Zeile        |
+| `SSH_KEY`        | **privater** Key (`~/.ssh/deploy_einkauf`), vollständig inkl. `-----BEGIN`-Zeile |
 | `SSH_PASSPHRASE` | nur falls der Key eine hat, sonst leer lassen                 |
 
-Was der Workflow tut: nach `.deploy/` hochladen, Dienst stoppen, `pb_data/` nach
+Was der Workflow tut: `.deploy/` auf dem Server leeren, dorthin hochladen, prüfen dass
+beide Ordner vollständig angekommen sind, Dienst stoppen, `pb_data/` nach
 `pb_data.bak/` sichern, `pb_public/` durch die neue Version ersetzen und
 `pb_migrations/` ergänzen, Dienst starten, `/api/health` pollen. Erst der letzte Schritt
 fasst den laufenden Stand an – scheitert der Upload, läuft die App unverändert weiter.
@@ -212,8 +261,13 @@ jeder Deploy überschreibt die vorherige. Existiert noch keine `pb_data/` (erste
 wird der Schritt übersprungen.
 
 Voraussetzungen auf dem Server: `curl` ist installiert, und wenn der SSH-User **nicht**
-root ist, braucht er passwortloses `sudo` für `systemctl` – die Action läuft ohne TTY,
-eine Passwortabfrage bricht ab.
+root ist, braucht er zweierlei – die Action läuft ohne TTY, eine Passwortabfrage bricht ab:
+
+* **Schreibrecht auf `TARGET` selbst.** Der Upload-Step nutzt kein `sudo`; gehört das
+  Verzeichnis root, scheitert er, bevor überhaupt ein `sudo` greifen kann.
+* **Passwortloses `sudo` für alle Kommandos des Skripts**, nicht nur `systemctl`: auch
+  `rm`, `cp`, `mv` und `mkdir` laufen darüber. Ein sudoers-Eintrag, der nur
+  `/bin/systemctl` erlaubt, lässt den Deploy mittendrin scheitern.
 
 `pb_data/` selbst wird nie hochgeladen und nie gelöscht.
 
@@ -232,7 +286,19 @@ Schema-Änderungen also besser eine eigene Kopie wegschreiben.
 
 ### Erste Schritte nach dem Deploy
 
-1. `https://einkauf.MEINEDOMAIN.de/_/` öffnen, Admin-Account anlegen.
+1. Superuser per CLI anlegen – auf dem Server:
+
+   ```bash
+   /var/www/mein-projekt/pocketbase superuser upsert DEINE@MAIL.DE EINPASSWORT
+   ```
+
+   Seit v0.23 gibt es unter `/_/` **keine** offene Maske mehr für den ersten Superuser;
+   PocketBase schreibt beim ersten Start stattdessen einen einmaligen Installer-Link mit
+   Token ins Log, den man unter systemd nur über `journalctl -u pocketbase` zu sehen
+   bekäme. Der CLI-Weg ist kürzer. Meldet der Befehl `database is locked`, greift der
+   laufende Dienst gerade auf dieselbe SQLite-Datei zu: `systemctl stop pocketbase`,
+   Befehl wiederholen, wieder starten. Danach unter
+   `https://einkauf.MEINEDOMAIN.de/_/` anmelden.
 2. In der Collection `users` die Familien-Accounts anlegen (E-Mail + Passwort + **Name**).
 3. App unter `https://einkauf.MEINEDOMAIN.de/` öffnen und auf dem Homescreen installieren.
 

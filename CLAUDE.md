@@ -140,6 +140,20 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   den alten Stand. Ursache: `TARGET` im Workflow ≠ `WorkingDirectory` der systemd-Unit —
   PocketBase sucht `pb_public/`, `pb_migrations/` und `pb_data/` relativ dazu. Prüfen mit
   `systemctl show pocketbase -p WorkingDirectory`.
+* **`status=203/EXEC` heißt nicht, dass PocketBase abgestürzt ist.** Symptom: der
+  Healthcheck läuft in zehn `curl: (7) Failed to connect`, `systemctl status` zeigt
+  `Active: activating (auto-restart)` und `code=exited, status=203/EXEC`. Ursache: systemd
+  konnte die Datei aus `ExecStart` gar nicht erst ausführen — sie fehlt, hat kein Exec-Bit
+  oder ist der falsche Build (Windows-`.exe`, falsche Architektur). Von PocketBase selbst
+  steht deshalb nichts im Log — der Prozess ist nie angelaufen; die Ursache loggt systemd
+  selbst (`journalctl -u pocketbase`: `Failed to locate executable ...`, `Failed at step
+  EXEC`). Das Binary wird bewusst *nicht*
+  mitdeployt, es muss einmalig von Hand auf dem Server liegen. Prüfen mit
+  `ls -l <TARGET>/pocketbase` und `file <TARGET>/pocketbase`.
+* **„Noch keine Datenbank vorhanden" im Deploy-Log ist ein Warnsignal, kein Hinweis.**
+  Nach dem ersten erfolgreichen Deploy darf die Zeile nicht mehr auftauchen. Tut sie es
+  doch, schreibt der Deploy in ein Verzeichnis, in dem PocketBase noch nie gelaufen ist —
+  also am Dienst vorbei oder auf einen Server ohne Installation.
 * **`curl -fsS http://127.0.0.1/api/health` als Healthcheck taugt nicht.** Läuft
   PocketBase mit `--https`, antwortet Port 80 mit einem 301; `curl -f` wertet das als
   Erfolg, ohne die API je erreicht zu haben. `-L` folgt dem Redirect, `-k` akzeptiert das
@@ -161,6 +175,15 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   `cd frontend && …` voranstellen.
 * Lange Markdown-Dateien über das `Write`-Tool schreiben; als Bash-Heredoc brechen sie
   am Quoting.
+* **`command not found` für ein Kommando, das es offensichtlich gibt** (`systemctl` auf
+  einem systemd-Server). Erkennungszeichen ist die Escape-Sequenz in der Meldung selbst:
+  `bash: $'\033[200~systemctl': command not found`, in der Terminalausgabe je nach Shell
+  als `^[[200~`. Das ist der Bracketed-Paste-Marker, den das Terminal beim Einfügen
+  mitschickt und den die Shell hier als Text übernommen hat statt als Steuerzeichen; der
+  Befehl hieß also wörtlich `\033[200~systemctl`, hinten hängt der Schluss-Marker
+  `\033[201~` dran (sichtbar `^[[201~`).
+  Abstellen mit `bind 'set enable-bracketed-paste off'` oder die Zeile tippen statt
+  einfügen.
 * Bewusst *nicht* enthalten: mehrere Listen, Vorlagen, Statistiken, Offline-Caching.
   `quantity` und `note` existieren im Schema und werden angezeigt, haben aber noch kein
   Eingabefeld.
