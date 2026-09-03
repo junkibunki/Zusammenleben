@@ -1,6 +1,5 @@
-name: Deploy to Strato Server
+name: Deploy PocketBase to Strato Server
 
-# Die Pipeline startet automatisch bei jedem Push auf den Haupt-Branch (main)
 on:
   push:
     branches:
@@ -13,6 +12,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 1. Dateien (Binary + pb_public) auf den Strato-Server kopieren
+      - name: Copy files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          port: 22
+          source: "pocketbase,pb_public/" # 
+          target: "/var/www/mein-projekt"
+
+      # 2. Per SSH Rechte vergeben und den systemd-Service neu starten
       - name: Execute SSH Commands on Strato
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -22,7 +34,11 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
           script: |
-            echo "Verbindung erfolgreich!"
-            cd /var/www/mein-projekt || mkdir -p /var/www/mein-projekt && cd /var/www/mein-projekt
-            echo "Hier können Sie jetzt git pull, docker-compose up oder npm install ausführen"
-            uname -a
+            # Ausführrechte für das Binary setzen
+            chmod +x /var/www/mein-projekt/pocketbase
+            
+            # PocketBase Service neu starten, um Änderungen zu übernehmen
+            sudo systemctl restart pocketbase
+            
+            # Status zur Kontrolle ausgeben
+            sudo systemctl status pocketbase --no-pager
