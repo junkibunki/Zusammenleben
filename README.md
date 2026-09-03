@@ -1,1 +1,292 @@
-# Einkaufszettelverwaltungssystem
+# Familien-Einkauf
+
+Gemeinsame Einkaufsliste als leichtgewichtige PWA.
+Ein einziger Prozess (PocketBase) liefert API **und** Frontend auf demselben Port.
+
+```
+/
+├── frontend/          # SvelteKit (Svelte 5 Runes, SPA)
+├── pb/                # PocketBase-Binary, pb_data/, pb_public/, pb_migrations/
+├── build.sh           # baut frontend -> pb/pb_public
+└── README.md
+```
+
+## Stack
+
+| Teil     | Technik                                                      |
+| -------- | ------------------------------------------------------------ |
+| Backend  | PocketBase (Go-Binary, SQLite) – kein eigener Backend-Code    |
+| Frontend | SvelteKit + Svelte 5 Runes, `@sveltejs/adapter-static` (SPA)  |
+| Styling  | handgeschriebenes CSS, mobile-first, Touch-Ziele 44px         |
+
+---
+
+## Lokal entwickeln
+
+**1. PocketBase besorgen** (einmalig) – Release von <https://github.com/pocketbase/pocketbase/releases>
+herunterladen und das Binary nach `pb/` legen (`pb/pocketbase` bzw. `pb/pocketbase.exe`).
+Benötigt wird **v0.23 oder neuer**, weil die Migrationen die neue JSVM-API nutzen
+(`app.save(collection)`, `fields: [...]`). Getestet mit **v0.40.2**.
+
+**2. PocketBase starten** – die Migrationen aus `pb/pb_migrations/` laufen beim Start automatisch:
+
+```bash
+cd pb && ./pocketbase serve
+```
+
+**3. Admin-Account anlegen** unter <http://127.0.0.1:8090/_/> (oder per CLI:
+`./pocketbase superuser upsert admin@example.com EINPASSWORT`), danach dort die
+Familien-Accounts in der Collection `users` anlegen – Selbstregistrierung ist per
+Migration abgeschaltet, ein `POST /api/collections/users/records` ohne Admin-Token
+antwortet mit `403`.
+
+**4. Frontend-Dev-Server:**
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+Läuft auf <http://localhost:5173>. Vite proxied `/api` und `/_` auf `127.0.0.1:8090`,
+dadurch gibt es lokal kein CORS und dieselbe Origin-Situation wie in Produktion.
+
+## Bauen
+
+```bash
+./build.sh
+```
+
+Schreibt das fertige SPA nach `pb/pb_public/`. PocketBase serviert diesen Ordner
+automatisch inklusive SPA-Fallback auf `index.html`.
+Danach ist alles unter `http://127.0.0.1:8090/` erreichbar – Frontend und API.
+
+---
+
+## Datenmodell
+
+Collection `items` (Migration `pb/pb_migrations/1756000000_created_items.js`):
+
+| Feld                  | Typ              | Hinweis                                                        |
+| --------------------- | ---------------- | -------------------------------------------------------------- |
+| `name`                | text             | required                                                       |
+| `quantity`            | text             | optional, Freitext ("2 Packungen")                             |
+| `category`            | select (1)       | Obst/Gemüse, Kühlregal, Trocken, Getränke, Drogerie, Sonstiges |
+| `done`                | bool             | nicht gesetzt = false                                          |
+| `note`                | text             | optional                                                       |
+| `added_by`            | relation → users |                                                                |
+| `done_by`             | relation → users | optional                                                       |
+| `created` / `updated` | autodate         | PocketBase-Automatik                                           |
+
+API-Rules für List/View/Create/Update/Delete jeweils `@request.auth.id != ""`.
+Bewusst grob – innerhalb einer Familie braucht es keine feingranularen Rechte.
+
+`users.createRule` wird per zweiter Migration auf `null` gesetzt: niemand kann sich
+selbst registrieren, Accounts legt der Admin an.
+
+---
+
+## Deployment auf einem STRATO-VPS
+
+### Voraussetzung
+
+Ein **A-Record** der (Sub-)Domain muss auf die VPS-IP zeigen, *bevor* PocketBase startet –
+sonst schlägt die Let's-Encrypt-Ausstellung fehl.
+
+### Achtung: STRATO hat zwei Firewalls
+
+Das ist die häufigste Fehlerquelle. Ports 80 **und** 443 müssen an **beiden** Stellen offen sein:
+
+1. auf dem Server selbst (`ufw allow 80,443/tcp` bzw. `iptables`)
+2. im **STRATO-Kundenbereich** unter *Server → Firewall* – dort gibt es eine zweite,
+   vorgelagerte Paketfilter-Regelung
+
+Ist Port 80 auch nur an einer der beiden Stellen zu, bekommt PocketBase kein Zertifikat
+(die ACME-HTTP-01-Challenge läuft über Port 80).
+
+### Dateien hochladen
+
+```bash
+rsync -av --exclude pb_data pb/ root@SERVER:/opt/einkauf/
+```
+
+`pb_data/` bleibt auf dem Server, das ist die Datenbank.
+
+### Start mit HTTPS
+
+PocketBase holt sich das Zertifikat selbst:
+
+```bash
+./pocketbase serve --http=0.0.0.0:80 --https=0.0.0.0:443 einkauf.MEINEDOMAIN.de
+```
+
+### systemd-Unit
+
+`/etc/systemd/system/pocketbase.service`:
+
+```ini
+[Unit]
+Description=PocketBase (Familien-Einkauf)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/einkauf
+ExecStart=/opt/einkauf/pocketbase serve --http=0.0.0.0:80 --https=0.0.0.0:443 einkauf.MEINEDOMAIN.de
+Restart=always
+RestartSec=5
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl daemon-reload
+systemctl enable --now pocketbase
+journalctl -u pocketbase -f
+```
+
+Port 80/443 sind privilegiert. Entweder – wie oben – als `root` laufen lassen, oder
+einen eigenen User nehmen und die Capability vergeben:
+
+```ini
+User=pocketbase
+Group=pocketbase
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+```
+
+Dann muss `/opt/einkauf` diesem User gehören.
+
+### Erste Schritte nach dem Deploy
+
+1. `https://einkauf.MEINEDOMAIN.de/_/` öffnen, Admin-Account anlegen.
+2. In der Collection `users` die Familien-Accounts anlegen (E-Mail + Passwort).
+3. App unter `https://einkauf.MEINEDOMAIN.de/` öffnen und auf dem Homescreen installieren.
+
+---
+
+## PWA
+
+Damit die App wirklich standalone startet und nicht nur ein Lesezeichen ist, sind drei
+Dinge umgesetzt:
+
+1. **Service Worker mit `fetch`-Handler** (`frontend/src/service-worker.js`).
+   Chrome zeigt "Installieren" nur, wenn ein Worker registriert ist, der einen
+   `fetch`-Handler hat. Der Handler reicht hier bloß durch – kein Caching, kein
+   Offline-Modus (war nicht gefordert). SvelteKit registriert `src/service-worker.js`
+   im Production-Build automatisch.
+2. **`<link rel="apple-touch-icon">`** in `frontend/src/app.html` – ohne das nimmt iOS
+   einen Screenshot der Seite als Homescreen-Icon.
+3. **`viewport-fit=cover`** im Viewport-Meta plus `env(safe-area-inset-*)` im CSS,
+   sonst klebt die untere Leiste am iPhone-Homebalken.
+
+Icons: `frontend/static/icon-192.png`, `icon-512.png`, `icon-512-maskable.png` –
+Platzhalter (Einkaufstasche, weiß auf Indigo). Neu erzeugen mit:
+
+```bash
+cd frontend && node scripts/generate-icons.mjs
+```
+
+Das Skript schreibt echte PNGs ohne Abhängigkeiten (nur `node:zlib`). Zum Ersetzen
+einfach eigene PNGs in `frontend/static/` ablegen.
+
+Verifiziert gegen PocketBase 0.40.2 unter Chromium: der Service Worker ist mit Scope `/`
+registriert, `activated` und kontrolliert die Seite (`navigator.serviceWorker.controller`
+gesetzt); Manifest, `apple-touch-icon` und `viewport-fit=cover` werden vom PocketBase-Prozess
+korrekt ausgeliefert.
+
+> **Zwei Punkte für den ersten Deploy:**
+>
+> * Chrome zeigt den Install-Prompt nur über **HTTPS** – lokal ist nur `localhost`
+>   ausgenommen. Auf dem VPS also erst das Let's-Encrypt-Setup, dann testen.
+> * PocketBase liefert `manifest.webmanifest` mit dem MIME-Typ aus, den das Betriebssystem
+>   für die Endung kennt. Unter Windows ist das `text/plain`, unter Linux (via
+>   `/etc/mime.types`) meist `application/manifest+json`. Chrome prüft den MIME-Typ des
+>   Manifests nicht, das ist also unkritisch – im Zweifel unter
+>   *DevTools → Application → Manifest* gegenprüfen.
+
+---
+
+## Frontend-Aufbau
+
+```
+frontend/src/
+├── app.html                   # PWA-Metas: manifest, apple-touch-icon, viewport-fit
+├── app.css                    # globales CSS, mobile-first
+├── service-worker.js          # trivialer Pass-through-Handler
+├── lib/
+│   ├── pocketbase.svelte.js   # PB-Client + reaktiver authStore-Spiegel
+│   └── items.svelte.js        # $state der Liste + Realtime-Subscription
+└── routes/
+    ├── +layout.js             # ssr = false, prerender = false
+    ├── +layout.svelte         # Auth-Guard / Redirects
+    ├── +page.svelte           # Liste, Hinzufügen, Abhaken, Löschen
+    └── login/+page.svelte     # E-Mail + Passwort
+```
+
+### Realtime
+
+`items.svelte.js` hält den State und verwaltet die Subscription. Wichtig: es werden
+**immer nur einzelne Items** mutiert (`push` / `splice` / `items[i] = …`), nie die
+Liste als Ganzes ersetzt. Dadurch kollidieren gleichzeitige Änderungen zweier
+Personen nicht.
+
+Abhaken und Löschen sind optimistisch: erst lokal, dann Server. Schlägt der Request
+fehl, wird der vorherige Zustand zurückgerollt.
+
+---
+
+## Was getestet wurde
+
+End-to-End gegen PocketBase 0.40.2, Frontend aus `pb/pb_public` vom selben Prozess serviert:
+
+* Migrationen laufen beim Start durch; `items` hat alle Felder inkl. `select`-Werte
+  mit Umlauten, alle fünf Rules stehen auf `@request.auth.id != ""`.
+* `users.createRule` ist `null`, Selbstregistrierung liefert `403`.
+* Login, Redirect `/` → `/login` und zurück, Session übersteht einen Reload.
+* Hinzufügen per Enter, Gruppierung nach Kategorie, Abhaken per Tap
+  (`done` **und** `done_by` landen korrekt in der DB), Löschen per „×“, „Aufräumen“.
+* **Realtime in beide Richtungen:** ein zweiter Client (via API als anderer User)
+  legt an, hakt ab und löscht – alles erscheint ohne Reload in der offenen UI.
+* Touch-Ziele gemessen: Zeile 44px, „×“ 44×44, Eingabefeld, Dropdown, „Aufräumen“
+  und „Abmelden“ ebenfalls 44px. Kein horizontales Scrollen bei 390px Breite.
+* Service Worker registriert und aktiv, SPA-Fallback (`/login` direkt aufgerufen)
+  liefert `200 text/html`.
+
+---
+
+## Notizen zu Abweichungen
+
+Wo zwei Wege möglich waren, wurde der einfachere genommen:
+
+* **`+layout.js` statt `+layout.ts`.** Das Projekt ist reines JavaScript, ein
+  TS-Setup wäre nur Ballast. Inhalt identisch (`ssr = false`, `prerender = false`).
+
+* **`syncItems()` statt `$effect` auf Modulebene.** Der Vorschlag aus der Spezifikation
+  ruft `$effect` direkt in einem Modul auf – das wirft in Svelte 5 `effect_orphan`,
+  Runes-Effekte brauchen einen Effekt-Kontext. Stattdessen exportiert
+  `items.svelte.js` die Funktion `syncItems()`, die Laden + Subscription startet und
+  das Teardown zurückgibt; `+page.svelte` ruft sie aus seinem `$effect` auf. Die Logik
+  im Subscription-Handler ist unverändert.
+
+* **`store.items` statt eines exportierten `let items = $state([])`.** Svelte 5
+  verbietet den Export einer `$state`-Variablen, die neu zugewiesen wird. Ein
+  `$state`-Objekt mit `items`-Property tut dasselbe und passt zur Regel
+  "nur einzelne Items synchronisieren".
+
+* **Löschen per `splice` statt `filter`.** `filter` würde die Liste komplett
+  ersetzen – genau das, was laut Spezifikation vermieden werden soll.
+
+* **"×"-Button statt Swipe.** Die Spezifikation lässt beides zu ("Swipe oder ein
+  kleines X"); der Button kommt ohne Gesten-Handling und ohne Konflikte mit dem
+  Scrollen aus und ist auf 44px Touch-Ziel gebracht.
+
+* **Erledigte Items sind standardmäßig eingeklappt** (Kopfzeile mit Anzahl zum
+  Aufklappen) statt dauerhaft sichtbar-ausgegraut – hält die Liste auf dem Handy kurz.
+
+* **`quantity` und `note` sind im Schema angelegt und werden in der Liste angezeigt,
+  haben aber noch kein Eingabefeld.** Die erste Version hat bewusst nur das eine Feld
+  ganz oben; die Felder existieren jetzt schon, damit später keine Schema-Migration
+  nötig ist.
+
+Nicht enthalten (bewusst): mehrere Listen, Vorlagen, Statistiken, Offline-Caching.

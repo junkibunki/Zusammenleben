@@ -1,0 +1,8 @@
+node_modules/
+frontend/.svelte-kit/
+
+# PocketBase-Laufzeit: Binary, Datenbank und Build-Output gehoeren nicht ins Repo
+pb/pocketbase
+pb/pocketbase.exe
+pb/pb_data/
+pb/pb_public/
