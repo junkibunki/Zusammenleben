@@ -34,8 +34,9 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 │   ├── svelte.config.js           # adapter-static, Output -> ../pb/pb_public
 │   ├── vite.config.js             # Tailwind-Plugin + Dev-Proxy /api + /_ -> :8090
 │   ├── components.json            # shadcn-svelte-Config (Style vega, Basis neutral)
-│   ├── scripts/generate-icons.mjs # PNG-Icons ohne Dependencies (node:zlib)
-│   ├── static/                    # manifest.webmanifest + 3 Icons
+│   ├── scripts/generate-icons.mjs # skaliert icon-source.png -> static/ (node:zlib)
+│   ├── scripts/icon-source.png    # Bildquelle, absichtlich nicht in static/
+│   ├── static/                    # manifest.webmanifest + icon-32/192/512.png
 │   └── src/
 │       ├── app.html               # PWA-Metas
 │       ├── app.css                # Tailwind-Entry: Design-Tokens hell/dunkel
@@ -242,7 +243,41 @@ Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Style
 * `manifest.webmanifest` wird von PocketBase mit dem MIME-Typ des OS ausgeliefert
   (Windows: `text/plain`, Linux meist `application/manifest+json`). Chrome prüft den
   Manifest-MIME-Typ nicht — kein Handlungsbedarf.
-* Icons neu bauen: `cd frontend && node scripts/generate-icons.mjs`.
+* Icons neu bauen: `cd frontend && node scripts/generate-icons.mjs`. Quelle ist
+  `frontend/scripts/icon-source.png`, Ausgabe sind `icon-32/192/512.png` in `static/`.
+
+### Icons aus einem Bild erzeugen
+
+* **Auf diesem Rechner gibt es kein Bildwerkzeug** — und das ist doppelt getarnt:
+  `command -v convert` findet `/c/Windows/system32/convert`, das ist das
+  *Dateisystem*-Konvertierprogramm von Windows, nicht ImageMagick. `python`/`python3`
+  liegen in `WindowsApps` und sind bloß Store-Platzhalter: sie drucken „Python wurde
+  nicht gefunden" und enden mit **Exit 49**, obwohl `command -v` sie findet. `magick`
+  und `ffmpeg` fehlen ganz. Skalieren also in Node mit `node:zlib` — für 8-Bit-RGB(A)
+  ohne Interlacing sind Dekoder und Enkoder je ~40 Zeilen.
+* **Ein Foto ohne Zeilenfilter zu kodieren kostet die Hälfte.** Der alte Generator schrieb
+  Filter 0 für jede Zeile — bei den einfarbigen Platzhalter-Icons egal, bei einem Bild
+  nicht: gemessen 645 KB gegen 439 KB für dasselbe 512er. Dazu `colorType 2` statt `6`,
+  wenn kein Pixel transparent ist. Die Filterwahl nach der Heuristik der PNG-Spec (12.8,
+  kleinste Summe der Absolutwerte) genügt.
+* **Beim Verkleinern Flächenmittel nehmen, nicht das nächste Pixel.** 1254 → 192 heißt,
+  dass jedes Zielpixel ~43 Quellpixel überdeckt; ein naives Sampling wirft 42 davon weg
+  und lässt feine Strukturen (Baumkronen, Wasserspiegelungen) flimmern.
+* **Die Bildquelle darf nicht in `static/`.** Sonst liefert PocketBase sie unter
+  `/icon.png` in Originalgröße aus und `build.sh` kopiert sie in jeden Build (hier
+  2,4 MB). Sie gehört neben das Skript, das sie liest.
+* **Ein randloses Bild braucht kein eigenes maskable-Icon.** Android beschneidet auf die
+  Safe-Zone (Kreis mit 80 % der Kante) — bei einem Foto trifft das nur den Rand, also
+  `"purpose": "any maskable"` am 512er und eine Datei weniger. Aufpolstern wäre hier das
+  schlechtere Ergebnis: es erzeugt Balken in einer Volltonfarbe, die im Bild nicht
+  vorkommt. Nachsehen statt raten — die Maske einmal als Kreis über das Icon rendern.
+* **Der Favicon-Link zeigt leicht auf ein Riesenbild.** `rel="icon"` hing an
+  `icon-192.png`; als Volltongrafik waren das 923 Bytes, als Foto 72 KB — auf jedem
+  Seitenaufruf. Deshalb `icon-32.png` fürs Tab.
+* Prüfen, ob die Icons wirklich taugen, geht ohne Screenshot: im Browser über
+  `fetch` + `createImageBitmap` die Größe jedes Manifest-Icons messen und gegen das
+  `sizes`-Attribut halten. Das beweist nebenbei, dass ein *fremder* Dekoder die selbst
+  geschriebenen PNGs liest.
 
 ## Beim Testen
 

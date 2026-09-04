@@ -323,15 +323,32 @@ Dinge umgesetzt:
 3. **`viewport-fit=cover`** im Viewport-Meta plus `env(safe-area-inset-*)` im CSS,
    sonst klebt die untere Leiste am iPhone-Homebalken.
 
-Icons: `frontend/static/icon-192.png`, `icon-512.png`, `icon-512-maskable.png` –
-Platzhalter (Einkaufstasche, weiß auf Indigo). Neu erzeugen mit:
+### App-Icon
+
+Quelle ist **eine einzige Datei**: `frontend/scripts/icon-source.png` (quadratisch,
+8-Bit-PNG, RGB oder RGBA, ohne Interlacing – so exportiert jedes Bildbearbeitungs­programm).
+Daraus erzeugt das Skript die drei ausgelieferten Größen:
 
 ```bash
 cd frontend && node scripts/generate-icons.mjs
 ```
 
-Das Skript schreibt echte PNGs ohne Abhängigkeiten (nur `node:zlib`). Zum Ersetzen
-einfach eigene PNGs in `frontend/static/` ablegen.
+| Datei                     | Wofür                                                  |
+| ------------------------- | ------------------------------------------------------ |
+| `static/icon-32.png`      | Favicon im Browser-Tab                                 |
+| `static/icon-192.png`     | Install-Prompt in Chrome, `apple-touch-icon` für iOS   |
+| `static/icon-512.png`     | Splashscreen und Android-Adaptive-Icon (`any maskable`) |
+
+Ein eigenes Icon setzt man also so: die eigene Datei als
+`frontend/scripts/icon-source.png` ablegen, Skript laufen lassen, committen. Die Quelle
+liegt bewusst **nicht** in `static/` – dort würde sie in Originalgröße mit ausgeliefert.
+Das Skript braucht keine Abhängigkeiten (nur `node:zlib`): es dekodiert das PNG selbst,
+skaliert per Flächenmittel und kodiert wieder.
+
+Es gibt **kein separates `maskable`-Icon**. Android beschneidet ein maskable-Icon auf die
+Safe-Zone (innere 80 %); bei einem randlosen Bild trifft das nur den Rand, deshalb steht
+am 512er im Manifest `"purpose": "any maskable"`. Ein Icon mit freistehendem Logo auf
+transparentem Grund bräuchte stattdessen eine zweite, kleiner skalierte Variante.
 
 Verifiziert gegen PocketBase 0.40.2 unter Chromium: der Service Worker ist mit Scope `/`
 registriert, `activated` und kontrolliert die Seite (`navigator.serviceWorker.controller`
