@@ -1,6 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// Keine Selbstregistrierung: Familien-Accounts werden im Admin-UI angelegt.
+// Keine Selbstregistrierung: Accounts werden im Admin-UI angelegt.
 migrate(
 	(app) => {
 		const users = app.findCollectionByNameOrId('users');

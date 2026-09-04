@@ -74,7 +74,7 @@ migrate(
 					},
 					// Die Endpoint-URLs von FCM/Mozilla/Apple sind lang. `pattern`
 					// begrenzt sie auf https: -- der Server postet woertlich dorthin,
-					// ohne das koennte ein Familienmitglied ihn zu einem Request auf
+					// ohne das koennte ein anderer Nutzer ihn zu einem Request auf
 					// eine beliebige (auch interne) Adresse bewegen.
 					{ name: 'endpoint', type: 'text', required: true, max: 1000, pattern: '^https://' },
 					{ name: 'p256dh', type: 'text', required: true, max: 200 },

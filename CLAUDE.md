@@ -1,4 +1,4 @@
-# CLAUDE.md — Familien-Einkauf
+# CLAUDE.md — Einkaufsliste
 
 Notizen für zukünftige Sessions. Ergänzt das [README](README.md) (das erklärt Setup und
 Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.

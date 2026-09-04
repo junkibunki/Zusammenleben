@@ -1,4 +1,4 @@
-# Familien-Einkauf
+# Einkaufsliste
 
 Gemeinsame Einkaufsliste als leichtgewichtige PWA.
 Ein einziger Prozess (PocketBase) liefert API **und** Frontend auf demselben Port.
@@ -43,7 +43,7 @@ cd pb && ./pocketbase superuser upsert admin@example.com EINPASSWORT
 ```
 
 Danach unter <http://127.0.0.1:8090/_/> anmelden und dort die
-Familien-Accounts in der Collection `users` anlegen (Feld `name` ausfüllen) – Selbstregistrierung ist per
+Accounts in der Collection `users` anlegen (Feld `name` ausfüllen) – Selbstregistrierung ist per
 Migration abgeschaltet, ein `POST /api/collections/users/records` ohne Admin-Token
 antwortet mit `403`.
 
@@ -91,7 +91,7 @@ Collection `items` (Migration `pb/pb_migrations/1756000000_created_items.js`):
 | `created` / `updated` | autodate         | PocketBase-Automatik                                           |
 
 API-Rules für List/View/Create/Update/Delete jeweils `@request.auth.id != ""`.
-Bewusst grob – innerhalb einer Familie braucht es keine feingranularen Rechte.
+Bewusst grob – innerhalb eines Haushalts braucht es keine feingranularen Rechte.
 
 `users.createRule` wird per zweiter Migration auf `null` gesetzt: niemand kann sich
 selbst registrieren, Accounts legt der Admin an.
@@ -103,7 +103,7 @@ ViewRule der Zielcollection, und die lässt per Default nur den eigenen Datensat
 bleibt auf den eigenen Account beschränkt.
 
 **Beim Anlegen eines Accounts das Feld `name` ausfüllen.** Es ist das einzige Feld, das
-für die anderen Familienmitglieder sichtbar ist – `email` liefert PocketBase nur bei
+für die anderen Nutzer sichtbar ist – `email` liefert PocketBase nur bei
 gesetztem `emailVisibility` bzw. für den eigenen Account aus. Ohne Namen steht in der
 Zeile „Jemand“.
 
@@ -168,7 +168,7 @@ PocketBase holt sich das Zertifikat selbst:
 
 ```ini
 [Unit]
-Description=PocketBase (Familien-Einkauf)
+Description=PocketBase (Einkaufsliste)
 After=network.target
 
 [Service]
@@ -322,7 +322,7 @@ Schema-Änderungen also besser eine eigene Kopie wegschreiben.
    laufende Dienst gerade auf dieselbe SQLite-Datei zu: `systemctl stop pocketbase`,
    Befehl wiederholen, wieder starten. Danach unter
    `https://einkauf.MEINEDOMAIN.de/_/` anmelden.
-2. In der Collection `users` die Familien-Accounts anlegen (E-Mail + Passwort + **Name**).
+2. In der Collection `users` die Accounts anlegen (E-Mail + Passwort + **Name**).
 3. App unter `https://einkauf.MEINEDOMAIN.de/` öffnen und auf dem Homescreen installieren.
 
 ---

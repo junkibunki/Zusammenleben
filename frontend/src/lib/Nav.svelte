@@ -15,7 +15,7 @@
 	// `title` steht in der Leiste, `label` im Menue -- die Startseite heisst dort
 	// nach ihrem Inhalt, oben aber weiter nach der App.
 	const LINKS = [
-		{ href: '/', label: 'Einkaufszettel', title: 'Familien-Einkauf', icon: ShoppingCartIcon },
+		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', icon: ShoppingCartIcon },
 		{ href: '/gundula', label: 'Wo ist Gundula', title: 'Wo ist Gundula', icon: CarIcon },
 		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
 		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
@@ -30,7 +30,7 @@
 	});
 
 	const title = $derived(
-		LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Familien-Einkauf'
+		LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste'
 	);
 	const photo = $derived(avatarUrl(auth.user));
 	const label = $derived(auth.user?.name || auth.user?.email?.split('@')[0] || '');

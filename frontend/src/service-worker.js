@@ -30,7 +30,7 @@ self.addEventListener('push', (event) => {
 
 	// Angezeigt werden *muss* etwas: das Abo laeuft mit userVisibleOnly, und
 	// stumme Pushes entzieht der Browser sonst irgendwann ganz.
-	const title = data.title || 'Familien-Einkauf';
+	const title = data.title || 'Einkaufsliste';
 
 	event.waitUntil(
 		self.registration.showNotification(title, {

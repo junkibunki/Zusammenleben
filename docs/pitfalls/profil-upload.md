@@ -24,7 +24,7 @@ Grund (falscher MIME-Typ, zu groß) steht in `err.response.data.<feld>.message`.
 Auswertung sieht der Nutzer einen englischen Satz ohne Information.
 
 **Das `avatar`-Feld ist `protected: false`:** die Datei-URL ist ohne Token abrufbar,
-geschützt nur durch den zufälligen Dateinamen. Bewusst so — für eine Familienliste reicht
+geschützt nur durch den zufälligen Dateinamen. Bewusst so — für eine private Einkaufsliste reicht
 das, und Bilder liegen so im Browser-Cache. Wer das enger will: `protected: true` plus
 `pb.files.getToken()`.
 

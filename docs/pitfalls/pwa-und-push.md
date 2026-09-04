@@ -21,7 +21,7 @@ Lesen, bevor du am Service Worker, an `push.svelte.js` oder an `pb/pb_hooks/` ar
 
 ## Web Push — Aufbau
 
-Ein neuer Eintrag löst eine Benachrichtigung an alle *anderen* Familienmitglieder aus.
+Ein neuer Eintrag löst eine Benachrichtigung an alle *anderen* Nutzer aus.
 Verschickt wird serverseitig aus einem PocketBase-Hook, ohne fremden Dienst: Web Push nach
 **RFC 8291** (Nutzlast als `aes128gcm`) und **RFC 8292** (VAPID/ES256). Empfänger sind die
 Push-Dienste der Browser (FCM, Mozilla Autopush, Apple).
@@ -82,7 +82,7 @@ Bundles.
 
 **Kein `setTimeout`, keine Goroutine.** Der Versand läuft synchron im Request des
 Anlegenden mit. Gemessen: ein `create` mit drei Empfängern dauert 260–470 ms statt ~40 ms.
-Für eine Familienliste in Ordnung; bei hundert Empfängern braucht es einen anderen Weg.
+Für eine Einkaufsliste in Ordnung; bei hundert Empfängern braucht es einen anderen Weg.
 
 **`app.logger()` schreibt nicht nach stdout**, sondern in die `_logs`-Collection. Ansehen
 mit `GET /api/logs?perPage=20&sort=-created` als Superuser; die Zeilen erscheinen mit ein

@@ -35,8 +35,8 @@
 	<Card.Root class="w-full max-w-sm">
 		<form class="flex flex-col gap-(--card-spacing)" onsubmit={submit}>
 			<Card.Header>
-				<Card.Title class="text-xl">Familien-Einkauf</Card.Title>
-				<Card.Description>Melde dich mit deinem Familien-Account an.</Card.Description>
+				<Card.Title class="text-xl">Einkaufsliste</Card.Title>
+				<Card.Description>Melde dich mit deinem Account an.</Card.Description>
 			</Card.Header>
 
 			<Card.Content class="flex flex-col gap-4">

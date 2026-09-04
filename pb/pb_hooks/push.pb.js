@@ -7,7 +7,7 @@
 // JS-VM aus, die den Modulscope dieser Datei nicht kennt.
 //
 // Das Senden laeuft bewusst synchron im Request des Anlegenden mit -- die JS-VM
-// hat kein setTimeout und keine Goroutine. Bei einer Familienliste sind das
+// hat kein setTimeout und keine Goroutine. Bei einer Einkaufsliste sind das
 // wenige HTTP-Requests mit knappem Timeout.
 
 // Schluessel gleich beim Start anlegen, damit der erste Klick auf "Einschalten"

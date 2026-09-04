@@ -1,6 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// Eingeloggte duerfen die Stammdaten der anderen Familienmitglieder *sehen*.
+// Eingeloggte duerfen die Stammdaten der anderen Nutzer *sehen*.
 // Ohne das liefert `expand=added_by,done_by` leere Objekte -- PocketBase prueft
 // beim Expand die ViewRule der Zielcollection, und die laesst per Default nur den
 // eigenen Datensatz durch. Bewusst nur ViewRule: die ListRule bleibt hier eng, damit

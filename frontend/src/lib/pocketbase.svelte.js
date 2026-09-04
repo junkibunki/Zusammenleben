@@ -67,7 +67,7 @@ export async function updateProfile({ name, avatar } = {}) {
 }
 
 /**
- * Alle Accounts der Familie, aelteste zuerst.
+ * Alle Accounts, aelteste zuerst.
  * Serverseitig wird nur nach `created` sortiert -- nach `name` standen Accounts
  * ohne Namen vorn; die Reihenfolge in der Anzeige entscheidet die Seite anhand
  * des Anzeigenamens. Braucht die ListRule aus Migration 1756000004.
