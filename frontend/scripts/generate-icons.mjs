@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'static');
 
-const BG = [0x4f, 0x46, 0xe5]; // --accent
+const BG = [0x17, 0x17, 0x17]; // --primary (#171717)
 const FG = [0xff, 0xff, 0xff];
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {

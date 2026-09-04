@@ -76,6 +76,19 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
 * Ein `bind:this`, das in einem `$effect` gelesen wird, braucht `$state` — sonst warnt
   `svelte-check` mit `non_reactive_update` und der Effekt läuft nie (Fokus in die
   Menü-Schublade, `Nav.svelte`).
+* **Was ein `$effect` liest, darf sein eigener Ablauf nicht schreiben.** Real passiert und
+  teuer: `syncItems()` läuft aus dem `$effect` der Listenseite und entschied den
+  Ladehinweis mit `store.loading = store.items.length === 0`. Damit hing der Effekt an
+  `store.items` — genau dem, was sein `getFullList().then()` neu zuweist. Ergebnis: eine
+  Endlosschleife aus Laden, Neustart, Ab- und wieder Anmelden des Realtime-Kanals,
+  gemessen **über 100 Requests in 1,2 Sekunden** ohne jede Bedienung.
+  Zwei Dinge daran sind bemerkenswert: es fällt nicht auf (die Liste sieht richtig aus,
+  `svelte-check` ist still, der Build ist grün — nur der Netzwerk-Tab schreit), und es
+  frisst nebenbei jede Meldung in `store.error` auf, weil jede Runde sie zurücksetzt.
+  Ein Zustand, der nur *steuert*, wie geladen wird, gehört deshalb in eine gewöhnliche
+  Modulvariable (`let loadedOnce = false` in `items.svelte.js`), nicht in `$state`.
+  Beim Ändern eines `$effect` immer fragen: liest das hier etwas, das der eigene
+  Rückweg schreibt? Und danach die Requests zählen, nicht nur die Anzeige ansehen.
 * **Vite-Plugin-Import:** `import { sveltekit } from '@sveltejs/kit/vite'` — *nicht*
   aus `@sveltejs/vite-plugin-svelte`, das exportiert kein `sveltekit`.
 
@@ -189,9 +202,32 @@ Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Style
   `onclick={() => input?.click()}` am shadcn-`Button`: die Tastatur bedient den Button,
   das Feld selbst bleibt aus der Tab-Reihenfolge. Das löst denselben Fall wie früher der
   fokussierbare 1px-Input, mit weniger CSS.
-* **Tap-Targets kommen nicht von allein.** shadcn ist für die Maus gebaut (`h-9`, ~36px).
-  Auf den Eingabefeldern und Hauptbuttons dieser App steht deshalb `class="h-11"` bzw.
-  `size="lg"` — 44px, wie vorher über `--tap`.
+* **Tap-Targets kommen nicht von allein, auch nicht mit `size="lg"`.** shadcn ist für die
+  Maus gebaut: `default` = `h-9` (36px), `lg` = `h-10` (**40px**), `icon` = `size-9`,
+  `sm` = `h-8` (32px). Für die 44px, die diese App vorher über `--tap` hatte, muss die
+  Höhe explizit dazu: `class="h-11"` bzw. `class="size-11"` bei Icon-Buttons. Nachmessen
+  statt schätzen — `size="lg"` sieht nach „groß" aus und ist es nicht.
+* **Eine Variante schlägt die nackte Utility-Klasse, und `tailwind-merge` merkt es nicht.**
+  Symptom: `<Select.Trigger class="h-11">` bleibt 36px hoch. Ursache: der Trigger bringt
+  `data-[size=default]:h-9` mit; kompiliert ist das
+  `.data-\[size\=default\]\:h-9[data-size=default]` (Spezifität 0,2,0) und gewinnt gegen
+  `.h-11` (0,1,0). `tailwind-merge` kann nicht entwirren, weil Variante und nackte Klasse
+  für es verschiedene Gruppen sind. Also **über dieselbe Variante** setzen:
+  `class="h-11 data-[size=default]:h-11"`. Genauso ist `w-72` an `Sheet.Content` wirkungslos
+  (`data-[side=left]:w-3/4` gewinnt) — solche Klassen sehen aus wie Code und sind keiner.
+* **Die Höhe der Topbar steht als `--header-h` in `app.css`.** Die Eingabeleiste der Liste
+  klebt mit `sticky top-(--header-h)` darunter. Ein hart notiertes `top-14` ist falsch,
+  sobald `env(safe-area-inset-top)` nicht 0 ist: in der installierten iOS-PWA wandert der
+  Header nach unten, die Leiste bleibt oben und verschwindet beim Scrollen dahinter.
+  Nachgemessen mit simuliertem 47px-Inset: Header 104px, Leiste bei 104px.
+* **`theme-color` zweimal setzen**, je `prefers-color-scheme` — sonst bleibt die
+  Browserleiste hell, während die App fast schwarz ist. Manifest und Icon-Skript kennen
+  weder `oklch` noch Variablen, dort stehen die Tokens als Hex (`#ffffff`, `#0a0a0a`,
+  Icon-Hintergrund `#171717`).
+* **`--chart-*` und `--sidebar-*` sind bewusst aus `app.css` entfernt** (nichts nutzt sie,
+  und die Sidebar-Akzente sind im Dunkelmodus blau — das widerspricht „neutral"). Wer per
+  `add` eine Chart- oder Sidebar-Komponente holt, muss die Tokens aus
+  `…/registry/colors/neutral.json` wieder eintragen.
 * Der `vega`-Preset nennt Inter als Schrift; das ist hier **nicht** eingebunden.
   Tailwinds eigenes `--font-sans` ist bereits ein System-Stack
   (`-apple-system, BlinkMacSystemFont, 'Segoe UI', …`) — kein Webfont, kein

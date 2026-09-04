@@ -1,35 +1,29 @@
 <script>
-	import { fade, fly } from 'svelte/transition';
 	import { page } from '$app/state';
+	import MenuIcon from '@lucide/svelte/icons/menu';
+	import ShoppingCartIcon from '@lucide/svelte/icons/shopping-cart';
+	import UserIcon from '@lucide/svelte/icons/user';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { auth, logout, avatarUrl } from '$lib/pocketbase.svelte.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 
 	// `title` steht in der Leiste, `label` im Menue -- die Startseite heisst dort
 	// nach ihrem Inhalt, oben aber weiter nach der App.
 	const LINKS = [
-		{ href: '/', label: 'Einkaufszettel', title: 'Familien-Einkauf', icon: '🛒' },
-		{ href: '/profile', label: 'Profil', title: 'Profil', icon: '👤' }
+		{ href: '/', label: 'Einkaufszettel', title: 'Familien-Einkauf', icon: ShoppingCartIcon },
+		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
 	];
 
 	let open = $state(false);
-	let burger; // fuer die Fokus-Rueckgabe beim Schliessen
-	// $state, weil der $effect unten darauf reagieren muss, sobald bind:this greift.
-	let drawer = $state(null);
 
 	// Jede Navigation schliesst die Schublade -- auch Zurueck/Vorwaerts.
 	$effect(() => {
 		page.url.pathname;
 		open = false;
 	});
-
-	// Beim Oeffnen den Fokus in die Schublade holen, damit Tab dort landet.
-	$effect(() => {
-		drawer?.focus();
-	});
-
-	function close() {
-		open = false;
-		burger?.focus();
-	}
 
 	const title = $derived(
 		LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Familien-Einkauf'
@@ -39,62 +33,74 @@
 	const initial = $derived((label || '?').charAt(0).toUpperCase());
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && open && close()} />
+<header class="safe-t bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
+	<div class="flex h-14 items-center gap-1 px-2">
+		<Sheet.Root bind:open>
+			<Sheet.Trigger>
+				{#snippet child({ props })}
+					<Button {...props} variant="ghost" size="icon-lg" class="size-11" aria-label="Menü öffnen">
+						<MenuIcon class="size-5" />
+					</Button>
+				{/snippet}
+			</Sheet.Trigger>
 
-<header class="topbar">
-	<button
-		bind:this={burger}
-		class="burger"
-		aria-label="Menü öffnen"
-		aria-expanded={open}
-		aria-controls={open ? 'nav-drawer' : undefined}
-		onclick={() => (open = true)}
-	>
-		<span></span><span></span><span></span>
-	</button>
-	<h1>{title}</h1>
-	{#if photo}
-		<img class="avatar sm" src={photo} alt="" />
-	{:else if initial !== '?'}
-		<span class="avatar sm fallback">{initial}</span>
-	{/if}
-</header>
+			<!-- Sheet bringt Fokusfalle, Escape, Scrim und aria-modal mit. -->
+			<Sheet.Content side="left" class="gap-0">
+				<Sheet.Header class="gap-0 border-b p-4 pr-12">
+					<div class="flex items-center gap-3">
+						<Avatar.Root size="lg">
+							{#if photo}
+								<Avatar.Image src={photo} alt="" />
+							{/if}
+							<Avatar.Fallback>{initial}</Avatar.Fallback>
+						</Avatar.Root>
+						<div class="min-w-0">
+							<Sheet.Title class="truncate text-sm">{label || 'Ohne Namen'}</Sheet.Title>
+							<Sheet.Description class="truncate text-xs">
+								{auth.user?.email ?? ''}
+							</Sheet.Description>
+						</div>
+					</div>
+				</Sheet.Header>
 
-{#if open}
-	<button
-		class="scrim"
-		aria-label="Menü schließen"
-		onclick={close}
-		transition:fade={{ duration: 120 }}
-	></button>
+				<nav class="flex flex-1 flex-col gap-1 p-2">
+					{#each LINKS as link (link.href)}
+						{@const active = page.url.pathname === link.href}
+						<Button
+							href={link.href}
+							variant={active ? 'secondary' : 'ghost'}
+							size="lg"
+							class="h-11 justify-start"
+							aria-current={active ? 'page' : undefined}
+						>
+							<link.icon class="size-4" />
+							{link.label}
+						</Button>
+					{/each}
+				</nav>
 
-	<nav
-		bind:this={drawer}
-		id="nav-drawer"
-		class="drawer"
-		tabindex="-1"
-		transition:fly={{ x: -300, duration: 180 }}
-	>
-		<div class="who">
+				<div class="safe-b p-2">
+					<Separator class="mb-2" />
+					<Button
+						variant="ghost"
+						size="lg"
+						class="text-destructive hover:text-destructive h-11 w-full justify-start"
+						onclick={logout}
+					>
+						<LogOutIcon class="size-4" />
+						Abmelden
+					</Button>
+				</div>
+			</Sheet.Content>
+		</Sheet.Root>
+
+		<h1 class="flex-1 truncate text-base font-semibold">{title}</h1>
+
+		<Avatar.Root>
 			{#if photo}
-				<img class="avatar lg" src={photo} alt="" />
-			{:else}
-				<span class="avatar lg fallback">{initial}</span>
+				<Avatar.Image src={photo} alt="" />
 			{/if}
-			<div class="who-text">
-				<strong>{label || 'Ohne Namen'}</strong>
-				<span>{auth.user?.email ?? ''}</span>
-			</div>
-		</div>
-
-		{#each LINKS as link (link.href)}
-			<a href={link.href} class:active={page.url.pathname === link.href}>
-				<span class="icon" aria-hidden="true">{link.icon}</span>{link.label}
-			</a>
-		{/each}
-
-		<button class="signout" onclick={logout}>
-			<span class="icon" aria-hidden="true">🚪</span>Abmelden
-		</button>
-	</nav>
-{/if}
+			<Avatar.Fallback class="text-xs">{initial}</Avatar.Fallback>
+		</Avatar.Root>
+	</div>
+</header>

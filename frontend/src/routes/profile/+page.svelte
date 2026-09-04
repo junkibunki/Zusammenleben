@@ -1,5 +1,14 @@
 <script>
+	import ImageIcon from '@lucide/svelte/icons/image';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import AlertCircleIcon from '@lucide/svelte/icons/circle-alert';
 	import { auth, avatarUrl, updateProfile } from '$lib/pocketbase.svelte.js';
+	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 
 	// PocketBase-Default fuer Dateifelder; der Server antwortet sonst mit 400.
 	const MAX_BYTES = 5 * 1024 * 1024;
@@ -9,7 +18,7 @@
 	let name = $state(auth.user?.name ?? '');
 	let picked = $state(null); // gewaehltes Foto, noch nicht gespeichert
 	let drop = $state(false); // beim Speichern das vorhandene Foto loeschen
-	let input; // <input type="file">, zum Zuruecksetzen nach dem Speichern
+	let input; // <input type="file">, per Button ausgeloest und zurueckgesetzt
 	let busy = $state(false);
 	let error = $state('');
 	let saved = $state(false);
@@ -133,55 +142,89 @@
 	}
 </script>
 
-<main class="profile">
-	<form onsubmit={submit}>
-		<div class="photo">
-			{#if shown}
-				<img class="avatar xl" src={shown} alt="Profilfoto" />
-			{:else}
-				<span class="avatar xl fallback">{initial}</span>
-			{/if}
+<main class="flex-1 px-3 py-4">
+	<Card.Root>
+		<form class="flex flex-col gap-(--card-spacing)" onsubmit={submit}>
+			<Card.Header>
+				<Card.Title>Mein Profil</Card.Title>
+				<Card.Description>Angemeldet als {auth.user?.email ?? ''}</Card.Description>
+			</Card.Header>
 
-			<div class="photo-actions">
-				<label class="filebtn">
-					Foto wählen
-					<input
-						bind:this={input}
-						type="file"
-						accept="image/*"
-						onchange={pick}
-						aria-label="Profilfoto wählen"
+			<Card.Content class="flex flex-col gap-6">
+				<div class="flex items-center gap-4">
+					<Avatar.Root class="size-20 text-2xl">
+						{#if shown}
+							<Avatar.Image src={shown} alt="Profilfoto" />
+						{/if}
+						<Avatar.Fallback>{initial}</Avatar.Fallback>
+					</Avatar.Root>
+
+					<div class="flex flex-col items-start gap-1">
+						<!-- Der Button loest das versteckte Feld aus: so bleibt genau ein
+						     fokussierbares Element, und die Tastatur kommt an den Dialog. -->
+						<Button type="button" variant="outline" size="lg" class="h-11" onclick={() => input?.click()}>
+							<ImageIcon class="size-4" />
+							Foto wählen
+						</Button>
+						<input
+							bind:this={input}
+							type="file"
+							accept="image/*"
+							onchange={pick}
+							class="hidden"
+							tabindex="-1"
+							aria-hidden="true"
+						/>
+						{#if shown}
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								class="text-destructive hover:text-destructive h-11"
+								onclick={removePhoto}
+							>
+								Foto entfernen
+							</Button>
+						{/if}
+					</div>
+				</div>
+
+				<div class="grid gap-2">
+					<Label for="profile-name">Name</Label>
+					<Input
+						id="profile-name"
+						type="text"
+						bind:value={name}
+						oninput={() => (saved = false)}
+						maxlength={100}
+						autocomplete="name"
+						placeholder="z.B. Mama"
+						class="h-11"
 					/>
-				</label>
-				{#if shown}
-					<button type="button" class="linkish" onclick={removePhoto}>Foto entfernen</button>
+					<p class="text-muted-foreground text-xs">
+						Dieser Name steht an den Einträgen, die du hinzufügst oder abhakst.
+					</p>
+				</div>
+
+				{#if error}
+					<Alert.Root variant="destructive">
+						<AlertCircleIcon />
+						<Alert.Description>{error}</Alert.Description>
+					</Alert.Root>
 				{/if}
-			</div>
-		</div>
+				{#if saved}
+					<Alert.Root>
+						<CheckIcon />
+						<Alert.Description>Gespeichert.</Alert.Description>
+					</Alert.Root>
+				{/if}
+			</Card.Content>
 
-		<label class="field">
-			Name
-			<input
-				type="text"
-				bind:value={name}
-				oninput={() => (saved = false)}
-				maxlength="100"
-				autocomplete="name"
-				placeholder="z.B. Mama"
-			/>
-		</label>
-
-		<p class="hint">Angemeldet als {auth.user?.email ?? ''}</p>
-
-		{#if error}
-			<div class="error">{error}</div>
-		{/if}
-		{#if saved}
-			<div class="ok">Gespeichert.</div>
-		{/if}
-
-		<button type="submit" class="primary" disabled={busy || !dirty}>
-			{busy ? 'Speichern …' : 'Speichern'}
-		</button>
-	</form>
+			<Card.Footer>
+				<Button type="submit" size="lg" class="h-11 w-full" disabled={busy || !dirty}>
+					{busy ? 'Speichern …' : 'Speichern'}
+				</Button>
+			</Card.Footer>
+		</form>
+	</Card.Root>
 </main>

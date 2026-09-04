@@ -19,7 +19,7 @@
 	{@render children()}
 {:else}
 	<!-- Rahmen samt Navigation gilt fuer alle angemeldeten Seiten. -->
-	<div class="app">
+	<div class="safe-b mx-auto flex min-h-dvh w-full max-w-2xl flex-col">
 		<Nav />
 		{@render children()}
 	</div>

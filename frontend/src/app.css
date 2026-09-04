@@ -1,525 +1,106 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Dark Mode folgt dem Geraet. Kein .dark-Klassenschalter, also muss auch die
+   dark:-Variante von Tailwind auf die Media Query zeigen -- sonst greifen die
+   dark:-Utilities in den shadcn-Komponenten nie. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+/* Tokens aus der offiziellen shadcn-svelte-Registry (Theme "neutral"). */
 :root {
-	--accent: #4f46e5;
-	--bg: #f7f7f8;
-	--card: #ffffff;
-	--text: #18181b;
-	--muted: #71717a;
-	--line: #e4e4e7;
-	--danger: #dc2626;
-	--tap: 44px;
-
-	color-scheme: light;
+	--radius: 0.625rem;
+	/* Topbar: Safe Area + h-14 + 1px Rahmen. Die Eingabeleiste klebt darunter. */
+	--header-h: calc(env(safe-area-inset-top) + 3.5rem + 1px);
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.145 0 0);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.145 0 0);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.145 0 0);
+	--primary: oklch(0.205 0 0);
+	--primary-foreground: oklch(0.985 0 0);
+	--secondary: oklch(0.97 0 0);
+	--secondary-foreground: oklch(0.205 0 0);
+	--muted: oklch(0.97 0 0);
+	--muted-foreground: oklch(0.556 0 0);
+	--accent: oklch(0.97 0 0);
+	--accent-foreground: oklch(0.205 0 0);
+	--destructive: oklch(0.577 0.245 27.325);
+	--border: oklch(0.922 0 0);
+	--input: oklch(0.922 0 0);
+	--ring: oklch(0.708 0 0);
 }
 
-* {
-	box-sizing: border-box;
-	-webkit-tap-highlight-color: transparent;
+@media (prefers-color-scheme: dark) {
+	:root {
+		--background: oklch(0.145 0 0);
+		--foreground: oklch(0.985 0 0);
+		--card: oklch(0.205 0 0);
+		--card-foreground: oklch(0.985 0 0);
+		--popover: oklch(0.205 0 0);
+		--popover-foreground: oklch(0.985 0 0);
+		--primary: oklch(0.922 0 0);
+		--primary-foreground: oklch(0.205 0 0);
+		--secondary: oklch(0.269 0 0);
+		--secondary-foreground: oklch(0.985 0 0);
+		--muted: oklch(0.269 0 0);
+		--muted-foreground: oklch(0.708 0 0);
+		--accent: oklch(0.269 0 0);
+		--accent-foreground: oklch(0.985 0 0);
+		--destructive: oklch(0.704 0.191 22.216);
+		--border: oklch(1 0 0 / 10%);
+		--input: oklch(1 0 0 / 15%);
+		--ring: oklch(0.556 0 0);
+	}
 }
 
-html,
-body {
-	margin: 0;
-	padding: 0;
-	background: var(--bg);
-	color: var(--text);
-	font: 16px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-	overscroll-behavior-y: none;
+@theme inline {
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
 }
 
-button,
-input,
-select {
-	font: inherit;
-	color: inherit;
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+
+	html {
+		/* Formularelemente und Scrollbalken sollen mitschalten. */
+		color-scheme: light dark;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	body {
+		@apply bg-background text-foreground;
+		/* Kein Gummiband-Scrollen am Seitenende auf dem Handy. */
+		overscroll-behavior-y: none;
+	}
 }
 
-button {
-	cursor: pointer;
-	border: none;
-	background: none;
-	min-height: var(--tap);
+@utility safe-t {
+	padding-top: env(safe-area-inset-top);
 }
 
-.app {
-	max-width: 640px;
-	margin: 0 auto;
-	min-height: 100dvh;
-	display: flex;
-	flex-direction: column;
-	/* viewport-fit=cover + safe-area: sonst klebt die Leiste im iPhone-Homebalken */
+@utility safe-b {
 	padding-bottom: env(safe-area-inset-bottom);
-}
-
-.topbar {
-	position: sticky;
-	top: 0;
-	z-index: 10;
-	background: var(--accent);
-	color: #fff;
-	padding: calc(env(safe-area-inset-top) + 10px) 12px 10px;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.topbar h1 {
-	font-size: 17px;
-	margin: 0;
-	flex: 1;
-	font-weight: 600;
-}
-
-.topbar button {
-	color: #fff;
-	font-size: 14px;
-	padding: 0 10px;
-	min-width: var(--tap);
-	border-radius: 8px;
-}
-
-.add {
-	display: flex;
-	gap: 8px;
-	padding: 10px 12px;
-	background: var(--card);
-	border-bottom: 1px solid var(--line);
-	position: sticky;
-	top: 0;
-	z-index: 5;
-}
-
-.add input[type='text'] {
-	flex: 1;
-	min-height: var(--tap);
-	padding: 0 12px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--bg);
-}
-
-.add select {
-	min-height: var(--tap);
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--bg);
-	padding: 0 6px;
-	max-width: 42%;
-}
-
-.list {
-	flex: 1;
-	padding: 8px 12px 32px;
-}
-
-.group {
-	margin-top: 14px;
-}
-
-.group > h2 {
-	font-size: 12px;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-	color: var(--muted);
-	margin: 0 0 6px 4px;
-	font-weight: 600;
-}
-
-.row {
-	display: flex;
-	align-items: center;
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-radius: 12px;
-	margin-bottom: 6px;
-	overflow: hidden;
-}
-
-.row .main {
-	flex: 1;
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-height: var(--tap);
-	padding: 8px 10px;
-	text-align: left;
-	width: 100%;
-}
-
-.box {
-	width: 22px;
-	height: 22px;
-	flex: 0 0 22px;
-	border: 2px solid var(--accent);
-	border-radius: 6px;
-	display: grid;
-	place-items: center;
-	font-size: 14px;
-	color: #fff;
-	line-height: 1;
-}
-
-.row.is-done .box {
-	background: var(--muted);
-	border-color: var(--muted);
-}
-
-.label {
-	flex: 1;
-	min-width: 0;
-}
-
-.label .qty {
-	color: var(--muted);
-	font-size: 13px;
-}
-
-.row.is-done {
-	opacity: 0.55;
-}
-
-.row.is-done .label > span:first-child {
-	text-decoration: line-through;
-}
-
-.del {
-	width: var(--tap);
-	min-width: var(--tap);
-	color: var(--muted);
-	font-size: 20px;
-	line-height: 1;
-}
-
-.donehead {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 22px;
-}
-
-.donehead button.toggle {
-	flex: 1;
-	text-align: left;
-	font-size: 12px;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-	color: var(--muted);
-	font-weight: 600;
-	padding-left: 4px;
-}
-
-.donehead button.clear {
-	font-size: 13px;
-	color: var(--danger);
-	padding: 0 10px;
-	border-radius: 8px;
-}
-
-.empty,
-.loading {
-	text-align: center;
-	color: var(--muted);
-	padding: 48px 16px;
-}
-
-.error {
-	margin: 8px 12px 0;
-	padding: 10px 12px;
-	background: #fef2f2;
-	color: var(--danger);
-	border-radius: 10px;
-	font-size: 14px;
-}
-
-/* Login */
-.login {
-	min-height: 100dvh;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	gap: 12px;
-	padding: 24px max(16px, env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
-	max-width: 420px;
-	margin: 0 auto;
-}
-
-.login h1 {
-	font-size: 22px;
-	margin: 0 0 8px;
-}
-
-.login input {
-	min-height: var(--tap);
-	padding: 0 12px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--card);
-	width: 100%;
-}
-
-.login button[type='submit'] {
-	min-height: var(--tap);
-	background: var(--accent);
-	color: #fff;
-	border-radius: 10px;
-	font-weight: 600;
-}
-
-.login button[disabled] {
-	opacity: 0.6;
-}
-
-.label .meta {
-	display: block;
-	margin-top: 2px;
-	color: var(--muted);
-	font-size: 11px;
-	line-height: 1.3;
-}
-
-/* Burgermenü */
-.topbar .burger {
-	width: var(--tap);
-	min-width: var(--tap);
-	display: grid;
-	place-content: center;
-	gap: 4px;
-	border-radius: 8px;
-}
-
-.topbar .burger span {
-	display: block;
-	width: 20px;
-	height: 2px;
-	background: #fff;
-	border-radius: 2px;
-}
-
-.scrim {
-	position: fixed;
-	inset: 0;
-	z-index: 40;
-	background: rgba(0, 0, 0, 0.4);
-	min-height: 0;
-	border-radius: 0;
-}
-
-.drawer {
-	position: fixed;
-	top: 0;
-	left: 0;
-	bottom: 0;
-	z-index: 50;
-	width: min(280px, 80vw);
-	background: var(--card);
-	border-right: 1px solid var(--line);
-	display: flex;
-	flex-direction: column;
-	padding: 0 8px calc(12px + env(safe-area-inset-bottom));
-	overflow-y: auto;
-}
-
-.drawer .who {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	background: var(--accent);
-	color: #fff;
-	margin: 0 -8px 8px;
-	padding: calc(env(safe-area-inset-top) + 16px) 14px 16px;
-}
-
-.drawer .who-text {
-	min-width: 0;
-}
-
-.drawer .who-text strong {
-	display: block;
-	font-size: 15px;
-}
-
-.drawer .who-text span {
-	display: block;
-	font-size: 12px;
-	opacity: 0.85;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.drawer a,
-.drawer .signout {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-height: var(--tap);
-	padding: 0 10px;
-	border-radius: 10px;
-	color: inherit;
-	text-decoration: none;
-	font-size: 15px;
-	width: 100%;
-	text-align: left;
-}
-
-.drawer a.active {
-	background: var(--bg);
-	font-weight: 600;
-	color: var(--accent);
-}
-
-.drawer .signout {
-	margin-top: auto;
-	color: var(--danger);
-	border-top: 1px solid var(--line);
-	border-radius: 0;
-}
-
-.drawer .icon {
-	font-size: 17px;
-	width: 22px;
-	text-align: center;
-}
-
-/* Profilfoto */
-.avatar {
-	border-radius: 50%;
-	object-fit: cover;
-	flex: none;
-	display: grid;
-	place-items: center;
-	background: var(--bg);
-	color: var(--accent);
-	font-weight: 600;
-}
-
-.avatar.sm {
-	width: 30px;
-	height: 30px;
-	font-size: 14px;
-	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
-}
-
-.avatar.lg {
-	width: 42px;
-	height: 42px;
-	font-size: 18px;
-}
-
-.avatar.xl {
-	width: 96px;
-	height: 96px;
-	font-size: 36px;
-	border: 1px solid var(--line);
-}
-
-/* Profilseite */
-.profile {
-	padding: 16px 12px 32px;
-}
-
-.profile form {
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-	background: var(--card);
-	border: 1px solid var(--line);
-	border-radius: 12px;
-	padding: 16px;
-}
-
-.profile .photo {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-}
-
-.profile .photo-actions {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 4px;
-}
-
-.profile .filebtn {
-	position: relative;
-	display: inline-grid;
-	place-items: center;
-	min-height: var(--tap);
-	padding: 0 14px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--bg);
-	font-size: 15px;
-	cursor: pointer;
-}
-
-/* Kein "display: none": das nimmt das Feld aus der Tab-Reihenfolge, und das
-   Label selbst ist nicht fokussierbar -- per Tastatur gaebe es dann keinen Weg
-   zum Datei-Dialog. Also unsichtbar, aber fokussierbar. */
-.profile .filebtn input[type='file'] {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	opacity: 0;
-}
-
-.profile .filebtn:focus-within {
-	outline: 2px solid var(--accent);
-	outline-offset: 2px;
-}
-
-.profile .linkish {
-	color: var(--danger);
-	font-size: 13px;
-	padding: 0;
-	min-height: 32px;
-}
-
-.profile .field {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	font-size: 13px;
-	color: var(--muted);
-}
-
-.profile .field input {
-	min-height: var(--tap);
-	padding: 0 12px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--bg);
-	font-size: 16px;
-	color: var(--text);
-}
-
-.profile .hint {
-	margin: 0;
-	font-size: 13px;
-	color: var(--muted);
-}
-
-.profile .error,
-.profile .ok {
-	margin: 0;
-	padding: 10px 12px;
-	border-radius: 10px;
-	font-size: 14px;
-}
-
-.profile .ok {
-	background: #ecfdf5;
-	color: #047857;
-}
-
-.profile .primary {
-	min-height: var(--tap);
-	background: var(--accent);
-	color: #fff;
-	border-radius: 10px;
-	font-weight: 600;
-}
-
-.profile .primary[disabled] {
-	opacity: 0.5;
 }
