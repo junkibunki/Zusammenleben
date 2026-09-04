@@ -3,14 +3,24 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { auth } from '$lib/pocketbase.svelte.js';
+	import Nav from '$lib/Nav.svelte';
 
 	let { children } = $props();
 
+	const onLogin = $derived(page.url.pathname === '/login');
+
 	$effect(() => {
-		const onLogin = page.url.pathname === '/login';
 		if (!auth.valid && !onLogin) goto('/login', { replaceState: true });
 		if (auth.valid && onLogin) goto('/', { replaceState: true });
 	});
 </script>
 
-{@render children()}
+{#if onLogin}
+	{@render children()}
+{:else}
+	<!-- Rahmen samt Navigation gilt fuer alle angemeldeten Seiten. -->
+	<div class="app">
+		<Nav />
+		{@render children()}
+	</div>
+{/if}

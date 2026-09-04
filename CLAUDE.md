@@ -40,10 +40,12 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 │       ├── app.css                # globales CSS, mobile-first
 │       ├── service-worker.js      # trivialer Pass-through, SvelteKit registriert ihn selbst
 │       ├── lib/
-│       │   ├── pocketbase.svelte.js  # PB-Client + reaktiver authStore-Spiegel
-│       │   └── items.svelte.js       # $state der Liste + Realtime
-│       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard),
-│                                  # +page.svelte (Liste), login/+page.svelte
+│       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
+│       │   ├── items.svelte.js       # $state der Liste + Realtime
+│       │   └── Nav.svelte            # Topbar + Burgermenue (Links, Logout)
+│       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
+│                                  # Rahmen mit Nav), +page.svelte (Liste),
+│                                  # profile/+page.svelte, login/+page.svelte
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ nötig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
@@ -68,6 +70,9 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   `effect_orphan`. `items.svelte.js` exportiert daher `syncItems()`, das Laden +
   Subscription startet und das Teardown zurückgibt; `+page.svelte` ruft es aus seinem
   `$effect` auf.
+* Ein `bind:this`, das in einem `$effect` gelesen wird, braucht `$state` — sonst warnt
+  `svelte-check` mit `non_reactive_update` und der Effekt läuft nie (Fokus in die
+  Menü-Schublade, `Nav.svelte`).
 * **Vite-Plugin-Import:** `import { sveltekit } from '@sveltejs/kit/vite'` — *nicht*
   aus `@sveltejs/vite-plugin-svelte`, das exportiert kein `sveltekit`.
 
@@ -102,7 +107,41 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   `app.findCollectionByNameOrId('users').id` holen statt eine ID zu hardcoden.
 * **`bool` kennt kein `default`.** "Nicht gesetzt" ist `false`, das genügt.
 * Migrationen laufen bei *jedem* App-Bootstrap, also auch bei `superuser upsert`, nicht
-  nur bei `serve`.
+  nur bei `serve`. Deshalb darf eine Migration **nicht werfen, wenn das Erwartete fehlt** —
+  ein `users.fields.getByName('x').y = …` auf ein nicht vorhandenes Feld nimmt die ganze
+  App mit runter, statt nur die Migration. Erst holen, prüfen, dann setzen.
+* **Ein Feld ändern statt anlegen: `fields.getByName(...)` liefert eine echte Referenz**,
+  keine Kopie — mutieren und `app.save(collection)` genügt (verifiziert:
+  `1756000003` setzt so die `thumbs` des `avatar`-Feldes). Der von PocketBase selbst
+  generierte `fields.addAt(index, new Field({...}))`-Stil braucht dagegen die volle
+  Feld-JSON inklusive `id` und die richtige Position.
+
+## Profil / Dateiupload
+
+* **`?thumb=WxH` funktioniert nur für Größen, die im Feld unter `thumbs` stehen.** Symptom:
+  die URL liefert 200 und ein gültiges Bild — nur eben das Original in voller Größe. Kein
+  Fehler, kein Log. PocketBase fällt bei einer nicht registrierten Größe still zurück
+  (nachgemessen: `?thumb=200x200` → 5,6 KB, `?thumb=33x33` → 7,9 KB = Originaldatei).
+  Deshalb Migration `1756000003`; `avatarUrl()` in `pocketbase.svelte.js` muss dieselbe
+  Größe verwenden.
+* **Upload per `FormData`**, nicht als JSON-Objekt; `data.append('avatar', '')` löscht die
+  Datei.
+* **Handyfotos vor dem Upload verkleinern.** Das `avatar`-Feld hat `maxSize: 0`, das ist
+  PocketBase-Default = 5 MB; ein Foto darüber wird abgelehnt. `profile/+page.svelte`
+  skaliert per Canvas auf 512px (5,8-MB-PNG → 7,9-KB-JPEG).
+  Dabei zwei Fallen: **JPEG kennt kein Alpha**, also vor `drawImage` weiß füllen, sonst
+  wird jede transparente Fläche schwarz — und **ist das Bild schon klein genug, gar nicht
+  neu codieren**, sonst verliert ein PNG-Logo seine Transparenz ohne jeden Grund.
+* **PocketBase sagt bei einem abgelehnten Upload nur "Failed to update record."** Der echte
+  Grund (falscher MIME-Typ, zu groß) steht in `err.response.data.<feld>.message`. Ohne
+  Auswertung sieht der Nutzer einen englischen Satz ohne Information.
+* Das `avatar`-Feld ist `protected: false`: die Datei-URL ist **ohne Token abrufbar**,
+  geschützt nur durch den zufälligen Dateinamen. Bewusst so — für eine Familienliste
+  reicht das, und Bilder liegen so im Browser-Cache. Wer das enger will: `protected: true`
+  plus `pb.files.getToken()`.
+* Bekannte Grenze: eine Namensänderung wirkt **nicht** auf bereits geladene Listenzeilen —
+  die zeigen `item.expand.added_by.name` aus dem Cache. Beim nächsten Betreten der Liste
+  (`syncItems()` lädt neu) steht der neue Name da.
 
 ## PWA
 
@@ -120,6 +159,9 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
 * **Der eingebettete Browser-Pane blockiert Service-Worker-Registrierung** und lässt
   Klicks in 30s-Timeouts laufen. Das ist kein App-Bug. Für echte Verifikation den
   Playwright-MCP nehmen — dort registriert der SW sauber und Klicks funktionieren.
+* **Der Playwright-MCP lädt nur Dateien aus dem Projektordner hoch.** Symptom:
+  `File access denied: … is outside allowed roots`. Testbilder also nicht im Temp-Ordner
+  ablegen, sondern im Repo (und hinterher wegräumen).
 * **Umlaute in Bash-`curl`-Payloads werden auf Windows zerlegt** und PocketBase antwortet
   mit einem nichtssagenden `400`. Für Requests mit Umlauten (z.B. `category:"Obst/Gemüse"`)
   `node -e "fetch(...)"` benutzen, Token per Env-Variable übergeben.

@@ -63,7 +63,9 @@ export const store = $state({
  */
 export function syncItems() {
 	let cancelled = false;
-	store.loading = true;
+	// Nur beim ersten Laden "Lade …" zeigen: beim Zurueckkehren von einer anderen
+	// Seite stehen die Eintraege noch da und wuerden sonst kurz nach unten springen.
+	store.loading = store.items.length === 0;
 	store.error = null;
 
 	pb.collection('items')

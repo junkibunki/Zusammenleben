@@ -1,5 +1,5 @@
 <script>
-	import { auth, logout } from '$lib/pocketbase.svelte.js';
+	import { auth } from '$lib/pocketbase.svelte.js';
 	import {
 		store,
 		syncItems,
@@ -61,87 +61,79 @@
 	}
 </script>
 
-<div class="app">
-	<header class="topbar">
-		<h1>Familien-Einkauf</h1>
-		<span style="font-size:13px;opacity:.85">{auth.user?.name || auth.user?.email || ''}</span>
-		<button onclick={logout}>Abmelden</button>
-	</header>
+<form class="add" onsubmit={submit}>
+	<input
+		type="text"
+		bind:value={draft}
+		placeholder="Was fehlt?"
+		enterkeyhint="done"
+		autocomplete="off"
+		aria-label="Neuer Eintrag"
+	/>
+	<select bind:value={category} aria-label="Kategorie">
+		{#each CATEGORIES as c (c)}
+			<option value={c}>{c}</option>
+		{/each}
+	</select>
+</form>
 
-	<form class="add" onsubmit={submit}>
-		<input
-			type="text"
-			bind:value={draft}
-			placeholder="Was fehlt?"
-			enterkeyhint="done"
-			autocomplete="off"
-			aria-label="Neuer Eintrag"
-		/>
-		<select bind:value={category} aria-label="Kategorie">
-			{#each CATEGORIES as c (c)}
-				<option value={c}>{c}</option>
-			{/each}
-		</select>
-	</form>
+{#if store.error}
+	<button class="error" style="width:calc(100% - 24px)" onclick={() => (store.error = null)}>
+		{store.error} (tippen zum Ausblenden)
+	</button>
+{/if}
 
-	{#if store.error}
-		<button class="error" style="width:calc(100% - 24px)" onclick={() => (store.error = null)}>
-			{store.error} (tippen zum Ausblenden)
-		</button>
+<main class="list">
+	{#if store.loading}
+		<p class="loading">Lade …</p>
+	{:else if store.items.length === 0}
+		<p class="empty">Die Liste ist leer. 🎉</p>
 	{/if}
 
-	<main class="list">
-		{#if store.loading}
-			<p class="loading">Lade …</p>
-		{:else if store.items.length === 0}
-			<p class="empty">Die Liste ist leer. 🎉</p>
+	{#each groups as group (group.category)}
+		<section class="group">
+			<h2>{group.category}</h2>
+			{#each group.items as item (item.id)}
+				{@const meta = metaFor(item)}
+				<div class="row">
+					<button class="main" onclick={() => toggleItem(item)}>
+						<span class="box"></span>
+						<span class="label">
+							<span>{item.name}</span>
+							{#if item.quantity}<span class="qty"> · {item.quantity}</span>{/if}
+							{#if item.note}<br /><span class="qty">{item.note}</span>{/if}
+							{#if meta}<span class="meta">{meta}</span>{/if}
+						</span>
+					</button>
+					<button class="del" aria-label="Löschen" onclick={() => deleteItem(item)}>×</button>
+				</div>
+			{/each}
+		</section>
+	{/each}
+
+	{#if done.length > 0}
+		<div class="donehead">
+			<button class="toggle" onclick={() => (showDone = !showDone)}>
+				{showDone ? '▾' : '▸'} Erledigt ({done.length})
+			</button>
+			<button class="clear" onclick={clearDone}>Aufräumen</button>
+		</div>
+
+		{#if showDone}
+			{#each done as item (item.id)}
+				{@const meta = metaFor(item)}
+				<div class="row is-done">
+					<button class="main" onclick={() => toggleItem(item)}>
+						<span class="box">✓</span>
+						<span class="label">
+							<span>{item.name}</span>
+							{#if item.quantity}<span class="qty"> · {item.quantity}</span>{/if}
+							{#if meta}<span class="meta">{meta}</span>{/if}
+						</span>
+					</button>
+					<button class="del" aria-label="Löschen" onclick={() => deleteItem(item)}>×</button>
+				</div>
+			{/each}
 		{/if}
-
-		{#each groups as group (group.category)}
-			<section class="group">
-				<h2>{group.category}</h2>
-				{#each group.items as item (item.id)}
-					{@const meta = metaFor(item)}
-					<div class="row">
-						<button class="main" onclick={() => toggleItem(item)}>
-							<span class="box"></span>
-							<span class="label">
-								<span>{item.name}</span>
-								{#if item.quantity}<span class="qty"> · {item.quantity}</span>{/if}
-								{#if item.note}<br /><span class="qty">{item.note}</span>{/if}
-								{#if meta}<span class="meta">{meta}</span>{/if}
-							</span>
-						</button>
-						<button class="del" aria-label="Löschen" onclick={() => deleteItem(item)}>×</button>
-					</div>
-				{/each}
-			</section>
-		{/each}
-
-		{#if done.length > 0}
-			<div class="donehead">
-				<button class="toggle" onclick={() => (showDone = !showDone)}>
-					{showDone ? '▾' : '▸'} Erledigt ({done.length})
-				</button>
-				<button class="clear" onclick={clearDone}>Aufräumen</button>
-			</div>
-
-			{#if showDone}
-				{#each done as item (item.id)}
-					{@const meta = metaFor(item)}
-					<div class="row is-done">
-						<button class="main" onclick={() => toggleItem(item)}>
-							<span class="box">✓</span>
-							<span class="label">
-								<span>{item.name}</span>
-								{#if item.quantity}<span class="qty"> · {item.quantity}</span>{/if}
-								{#if meta}<span class="meta">{meta}</span>{/if}
-							</span>
-						</button>
-						<button class="del" aria-label="Löschen" onclick={() => deleteItem(item)}>×</button>
-					</div>
-				{/each}
-			{/if}
-		{/if}
-	</main>
-</div>
+	{/if}
+</main>
