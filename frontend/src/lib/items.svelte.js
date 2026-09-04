@@ -57,6 +57,11 @@ export const store = $state({
 	error: null
 });
 
+// Bewusst *kein* $state: syncItems() laeuft in einem $effect, und jeder reaktive
+// Lesezugriff dort macht den Effekt von dem abhaengig, was sein eigener
+// Ladevorgang anschliessend schreibt -- Endlosschleife aus Request und Neustart.
+let loadedOnce = false;
+
 /**
  * Laedt die Liste und haengt die Realtime-Subscription an.
  * Aufruf aus einem $effect heraus; der Rueckgabewert ist das Teardown.
@@ -65,7 +70,7 @@ export function syncItems() {
 	let cancelled = false;
 	// Nur beim ersten Laden "Lade …" zeigen: beim Zurueckkehren von einer anderen
 	// Seite stehen die Eintraege noch da und wuerden sonst kurz nach unten springen.
-	store.loading = store.items.length === 0;
+	store.loading = !loadedOnce;
 	store.error = null;
 
 	pb.collection('items')
@@ -74,6 +79,7 @@ export function syncItems() {
 			if (cancelled) return;
 			store.items = records;
 			store.loading = false;
+			loadedOnce = true;
 		})
 		.catch((err) => {
 			if (cancelled) return;
