@@ -7,6 +7,7 @@
 	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { auth, logout, avatarUrl } from '$lib/pocketbase.svelte.js';
+	import { tapAvatar } from '$lib/easteregg.svelte.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -100,11 +101,23 @@
 
 		<h1 class="flex-1 truncate text-base font-semibold">{title}</h1>
 
-		<Avatar.Root>
-			{#if photo}
-				<Avatar.Image src={photo} alt="" />
-			{/if}
-			<Avatar.Fallback class="text-xs">{initial}</Avatar.Fallback>
-		</Avatar.Root>
+		<!-- Osterei: fuenf Tipps aufs Profilbild und der Drache fliegt. Das Bild ist
+		     Dekoration (alt=""), der Knopf darum bleibt es deshalb auch: mit
+		     `aria-hidden` und `tabindex="-1"` steht hier kein namenloses
+		     Bedienelement in der Tastatur- und Screenreader-Reihenfolge. -->
+		<button
+			type="button"
+			class="touch-manipulation rounded-full"
+			onclick={tapAvatar}
+			aria-hidden="true"
+			tabindex="-1"
+		>
+			<Avatar.Root>
+				{#if photo}
+					<Avatar.Image src={photo} alt="" />
+				{/if}
+				<Avatar.Fallback class="text-xs">{initial}</Avatar.Fallback>
+			</Avatar.Root>
+		</button>
 	</div>
 </header>

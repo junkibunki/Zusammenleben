@@ -91,6 +91,13 @@ für es verschiedene Gruppen sind. Also über dieselbe Variante setzen:
   nur dadurch genügt einem Overlay darüber ein kleiner z-index. Fehlt das `isolate`
   irgendwann, verschwindet ein `fixed`-Element mit `z-40` hinter den Kartenkacheln —
   sichtbar nur auf dieser einen Seite.
+* **Ein Bedienelement, das mehrfach schnell angetippt wird, braucht
+  `touch-manipulation`.** Der Viewport in `app.html` erlaubt Zoom (kein
+  `user-scalable=no`), also deutet iOS Safari zwei schnelle Taps als
+  Double-Tap-Zoom: die Seite zoomt, statt das Ereignis ein zweites Mal zu liefern.
+  Betrifft nur Mehrfach-Tap-Gesten (hier die fuenf Tipps aufs Profilbild in
+  `Nav.svelte`), nicht die gewoehnlichen Knoepfe. Vorbeugend gesetzt, auf einem
+  iPhone nicht nachgeprueft — am Desktop ist der Fall unsichtbar.
 * **`theme-color` zweimal setzen**, je `prefers-color-scheme` — sonst bleibt die
   Browserleiste hell, während die App fast schwarz ist. Manifest und Icon-Skript kennen
   weder `oklch` noch Variablen, dort stehen die Tokens als Hex (`#ffffff`, `#0a0a0a`,

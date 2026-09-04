@@ -97,7 +97,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
 │       │   ├── gundula.svelte.js     # $state des Parkplatzes + Realtime
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
-│       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Zustand des Drachenflugs
+│       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
 │       │   ├── components/ui/        # shadcn-svelte, CLI-Output (nicht haendisch pflegen)
 │       │   ├── Dragon.svelte         # Pixelsprite als Zeichenraster + Flug-Animation
