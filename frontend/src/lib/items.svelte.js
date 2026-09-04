@@ -19,11 +19,25 @@ export function userLabel(user) {
 	return user.name || user.email?.split('@')[0] || 'Jemand';
 }
 
-/** PocketBase-Zeitstempel ("2026-09-03 19:41:30.123Z") kurz und deutsch. */
-export function formatWhen(value) {
-	if (!value) return '';
+/** PocketBase-Zeitstempel ("2026-09-03 19:41:30.123Z") zu einem Date; null wenn unbrauchbar. */
+function parseStamp(value) {
+	if (!value) return null;
+	// Ohne das "T" liest Safari den Zeitstempel nicht.
 	const date = new Date(String(value).replace(' ', 'T'));
-	if (Number.isNaN(date.getTime())) return '';
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Nur der Tag, ausgeschrieben -- fuer Angaben, bei denen die Uhrzeit belanglos ist. */
+export function formatDate(value) {
+	const date = parseStamp(value);
+	if (!date) return '';
+	return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Zeitstempel kurz und deutsch, mit Uhrzeit ("heute 19:41", "3. Sep 19:41"). */
+export function formatWhen(value) {
+	const date = parseStamp(value);
+	if (!date) return '';
 
 	const today = new Date();
 	const sameDay =

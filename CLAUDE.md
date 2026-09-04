@@ -49,7 +49,8 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 │       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)
 │       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
 │                                  # Rahmen mit Nav), +page.svelte (Liste),
-│                                  # profile/+page.svelte, login/+page.svelte
+│                                  # profile/+page.svelte, residents/+page.svelte,
+│                                  # login/+page.svelte
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ nötig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
@@ -105,7 +106,11 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
 * **`expand` kommt leer zurück, wenn die View-Rule der Zielcollection zumacht.** Symptom:
   `record.expand` ist `{}`, kein Fehler, kein Log. Ursache bei `users`: die Standard-Rule
   `id = @request.auth.id` lässt nur den eigenen Datensatz durch. Migration
-  `1756000002` öffnet die ViewRule für Eingeloggte; die ListRule bleibt eng.
+  `1756000002` öffnet die ViewRule für Eingeloggte. Die ListRule blieb dabei eng und
+  öffnet erst `1756000004` — die Seite "Bewohner" braucht sie, denn mit der engen Rule
+  liefert `getFullList('users')` nur den eigenen Datensatz. Damit ist `users` für
+  Eingeloggte auflist- und filterbar; die Feldsichtbarkeit ändert das nicht (E-Mail
+  weiter nur beim eigenen Record bzw. bei `emailVisibility`).
 * **`expand` muss an *jeden* Call**, sonst fehlt der Name genau im ungetesteten Pfad:
   `getFullList({ expand })`, `create(data, { expand })`, `update(id, data, { expand })`
   und — leicht übersehen — `subscribe('*', cb, { expand })` als **drittes** Argument.
@@ -127,6 +132,13 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   nur bei `serve`. Deshalb darf eine Migration **nicht werfen, wenn das Erwartete fehlt** —
   ein `users.fields.getByName('x').y = …` auf ein nicht vorhandenes Feld nimmt die ganze
   App mit runter, statt nur die Migration. Erst holen, prüfen, dann setzen.
+* **Eine Migration mit *kleinerer* Nummer nachschieben ist unkritisch.** PocketBase
+  fuehrt Buch pro Datei (Tabelle `_migrations`), nicht ueber einen Hoechststand:
+  `1756000004` lief auch dann noch an, als `1756000005` schon angewendet war
+  (nachgemessen an einer DB mit dem alten Satz). Auf einer frischen DB ist die
+  Reihenfolge ohnehin aufsteigend — nur wenn zwei Migrationen dasselbe Feld anfassen,
+  muss man die Reihenfolge selbst durchdenken.
+
 * **Ein Feld ändern statt anlegen: `fields.getByName(...)` liefert eine echte Referenz**,
   keine Kopie — mutieren und `app.save(collection)` genügt (verifiziert:
   `1756000003` setzt so die `thumbs` des `avatar`-Feldes). Der von PocketBase selbst
@@ -297,6 +309,16 @@ Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Style
   geschriebenen PNGs liest.
 
 ## Beim Testen
+
+* **Weiße Seite mit genau einem `TypeError: Cannot read properties of undefined
+  (reading 'data')`.** Kein Svelte-Fehler, sondern ein zerrissener Build in
+  `pb/pb_public/`: SvelteKit legt seinen Laufzeit-Zustand unter einem pro Build neu
+  gewürfelten Global `__sveltekit_<hash>` ab, das `index.html` inline setzt und die
+  Chunks lesen. Laufen zwei Builds ineinander (hier: zwei Sessions parallel), passt das
+  `index.html` des einen nicht zu den Chunks des anderen und die Hydration stirbt an
+  der ersten Zeile. Prüfen statt raten:
+  `grep -ro "__sveltekit_[a-z0-9]*" pb/pb_public | sed 's/.*://' | sort -u` muss
+  **genau einen** Namen ausgeben. Heilmittel ist ein erneutes `build.sh`.
 
 * **Der eingebettete Browser-Pane blockiert Service-Worker-Registrierung** und lässt
   Klicks in 30s-Timeouts laufen. Das ist kein App-Bug. Für echte Verifikation den
