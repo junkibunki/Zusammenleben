@@ -1,15 +1,10 @@
 import { pb } from './pocketbase.svelte.js';
 
-export const CATEGORIES = [
-	'Obst/Gemüse',
-	'Kühlregal',
-	'Trocken',
-	'Getränke',
-	'Drogerie',
-	'Sonstiges'
-];
+// Wo eingekauft werden soll. Die Werte muessen mit dem select-Feld
+// `items.category` uebereinstimmen (Migration 1756000005).
+export const CATEGORIES = ['Supermarkt', 'Drogerie', 'Baumarkt', 'IKEA'];
 
-export const DEFAULT_CATEGORY = 'Sonstiges';
+export const DEFAULT_CATEGORY = 'Supermarkt';
 
 // Relations mitladen, sonst steht in der Zeile nur eine Record-ID.
 const EXPAND = 'added_by,done_by';

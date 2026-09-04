@@ -74,6 +74,16 @@
 	class="bg-background sticky top-(--header-h) z-10 flex items-center gap-2 border-b px-3 py-2.5"
 	onsubmit={submit}
 >
+	<Select.Root type="single" bind:value={category}>
+		<Select.Trigger class="h-11 w-32 shrink-0 data-[size=default]:h-11" aria-label="Wo einkaufen">
+			{category}
+		</Select.Trigger>
+		<Select.Content>
+			{#each CATEGORIES as c (c)}
+				<Select.Item value={c} label={c}>{c}</Select.Item>
+			{/each}
+		</Select.Content>
+	</Select.Root>
 	<Input
 		type="text"
 		bind:value={draft}
@@ -83,16 +93,6 @@
 		aria-label="Neuer Eintrag"
 		class="h-11 flex-1"
 	/>
-	<Select.Root type="single" bind:value={category}>
-		<Select.Trigger class="h-11 w-32 shrink-0 data-[size=default]:h-11" aria-label="Kategorie">
-			{category}
-		</Select.Trigger>
-		<Select.Content>
-			{#each CATEGORIES as c (c)}
-				<Select.Item value={c} label={c}>{c}</Select.Item>
-			{/each}
-		</Select.Content>
-	</Select.Root>
 </form>
 
 {#if store.error}

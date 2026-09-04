@@ -132,6 +132,23 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   `1756000003` setzt so die `thumbs` des `avatar`-Feldes). Der von PocketBase selbst
   generierte `fields.addAt(index, new Field({...}))`-Stil braucht dagegen die volle
   Feld-JSON inklusive `id` und die richtige Position.
+* **Die Werte eines `select`-Feldes ändern heißt auch: Bestandsdaten umschreiben.**
+  PocketBase prüft beim Speichern den *ganzen* Record, nicht nur die geschickten Felder —
+  ein Item mit einem Wert, der nicht mehr in `values` steht, ließe sich also nicht mehr
+  abhaken. Umschreiben geht in derselben Migration per
+  `app.db().newQuery('UPDATE …').execute()` (so bei `1756000005`, alte Warengruppen ->
+  `Supermarkt`).
+* **`migrate up` sagt „No new migrations to apply", *nachdem* es die Migration ausgeführt
+  hat.** Das Kommando bootstrappt die App, und der Bootstrap führt die offenen
+  Migrationen selbst aus; die eigentliche Prüfung des Kommandos läuft danach und findet
+  nichts mehr. Kein Grund zu suchen, warum `up` nichts tut — nachsehen, ob die Änderung
+  schon da ist.
+* **Ein `grep` in `pb_data/data.db` beweist nichts.** Frische Änderungen stehen im WAL
+  (`data.db-wal`), nicht in der Hauptdatei — Symptom: die neuen Enum-Werte sind „nicht
+  da", obwohl die Migration gelaufen ist. Zum Prüfen einen temporären Hook in `pb_hooks/`
+  legen, der in `onBootstrap` über `$app` liest, und ihn hinterher löschen.
+  (`$app.db().newQuery(...).all(arr, new DynamicModel(...))` lieferte dabei still nichts;
+  `$app.findAllRecords('items')` funktioniert.)
 
 ## Profil / Dateiupload
 
