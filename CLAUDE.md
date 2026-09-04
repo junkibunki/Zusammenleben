@@ -14,8 +14,21 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
   unvoreingenommen gegen die Anforderung prüfen, nicht die eigene Erzählung bestätigen.
 * Er soll keine UI-Tests durchführen. Reine UI-Änderungen kann der Nutzer selbst testen,
   das spart Token.
-* **Nur committen, wenn der Agent grünes Licht gibt.** Bei Findings: erst beheben, dann
-  erneut reviewen lassen.
+* **Nur committen, wenn der Agent grünes Licht gibt.** Bei Findings: erst beheben.
+
+**Nach dem Beheben ist ein zweites Review nicht automatisch fällig** — entscheide nach dem
+Umfang der Korrektur, nicht nach der Zahl der Findings:
+
+* **Klein → direkt committen.** Die Korrektur blieb im schon geprüften Code, hat keinen
+  neuen Ablaufpfad geschaffen und nichts angefasst, was außerhalb liegt: eine
+  Bedingung gedreht, einen Fehlerfall ergänzt, umbenannt, Text- und Layoutkram, eine
+  vergessene `expand`-Option.
+* **Groß → erneut reviewen.** Sobald die Korrektur eine neue Ablauflogik einführt, weitere
+  Dateien mitzieht, Schema/Migration/API-Rules berührt, an Auth oder dem Push-Versand
+  dreht, oder wenn du beim Beheben gemerkt hast, dass der Ansatz selbst nicht stimmte.
+  Dann sieht der zweite Agent faktisch neuen Code — der war noch nie geprüft.
+* Im Zweifel reviewen. Ein zweiter Durchlauf kostet weniger als ein Fehler, der über
+  `main` auf den VPS geht.
 
 ### Pitfalls dokumentieren
 
@@ -47,7 +60,7 @@ kurze Datei als ein siebter Absatz in einer fremden.
 * Messwerte nur, wenn sie das Erkennen tragen (`?thumb=200x200` → 5,6 KB vs. 7,9 KB), nicht
   als Beleg dafür, dass gemessen wurde.
 * Wird ein Abschnitt beim Ergänzen länger als ~80 Zeilen, teile ihn auf, statt ihn wachsen
-  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 174).
+  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 189).
 
 ## Vertiefung: erst lesen, wenn das Thema dran ist
 
@@ -82,9 +95,12 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       ├── lib/
 │       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
+│       │   ├── gundula.svelte.js     # $state des Parkplatzes + Realtime
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
+│       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Zustand des Drachenflugs
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
 │       │   ├── components/ui/        # shadcn-svelte, CLI-Output (nicht haendisch pflegen)
+│       │   ├── Dragon.svelte         # Pixelsprite als Zeichenraster + Flug-Animation
 │       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)
 │       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
 │                                  # Rahmen mit Nav), +page.svelte (Liste),
@@ -163,6 +179,10 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   `cd frontend && …` voranstellen.
 * Lange Markdown-Dateien über das `Write`-Tool schreiben; als Bash-Heredoc brechen sie am
   Quoting.
+* **Auf dieser Maschine gibt es kein `python`.** Symptom: „Python wurde nicht gefunden;
+  ohne Argumente ausführen, um aus dem Microsoft Store zu installieren" — der `python`
+  im PATH ist nur der Store-Stub aus `WindowsApps`. Für kleine Skripte `node -` mit
+  Heredoc nehmen.
 * **`command not found` für ein Kommando, das es offensichtlich gibt** (`systemctl` auf
   einem systemd-Server). Erkennungszeichen ist die Escape-Sequenz in der Meldung selbst:
   `bash: $'\033[200~systemctl': command not found`, in der Terminalausgabe je nach Shell
