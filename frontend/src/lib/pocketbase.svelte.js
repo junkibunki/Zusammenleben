@@ -19,7 +19,17 @@ export async function login(email, password) {
 	await pb.collection('users').authWithPassword(email, password);
 }
 
-export function logout() {
+export async function logout() {
+	// Erst das Push-Abo dieses Geraets abmelden -- danach fehlt das Token dafuer,
+	// und der Server wuerde einem abgemeldeten Geraet weiter jede neue Zeile der
+	// Liste anzeigen. Dynamisch importiert, damit kein Importzyklus entsteht
+	// (push.svelte.js braucht `pb` von hier).
+	try {
+		const { unsubscribeThisDevice } = await import('./push.svelte.js');
+		await unsubscribeThisDevice();
+	} catch {
+		// Abmelden darf daran nicht scheitern.
+	}
 	pb.authStore.clear();
 }
 

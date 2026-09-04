@@ -1,0 +1,16 @@
+[  879679ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://127.0.0.1:8092/_app/immutable/assets/2.CV-KWLNP.css:0
+[  879686ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js:0
+[  879687ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  882164ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://127.0.0.1:8092/api/collections/users/records?page=1&perPage=1000&skipTotal=1&sort=created:0
+[  882194ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  882412ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  882483ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  882970ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  884242ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  884279ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  884282ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  884613ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://127.0.0.1:8092/_app/version.json:0
+[  884614ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  884892ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://127.0.0.1:8092/_app/version.json:0
+[  884892ms] [ERROR] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:8092/_app/immutable/nodes/2.D-c0TSUp.js @ http://127.0.0.1:8092/_app/immutable/entry/app.DYvEk2CW.js:1
+[  886417ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://127.0.0.1:8092/_app/version.json:0

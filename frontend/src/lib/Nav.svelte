@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import ShoppingCartIcon from '@lucide/svelte/icons/shopping-cart';
+	import CarIcon from '@lucide/svelte/icons/car';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
@@ -15,6 +16,7 @@
 	// nach ihrem Inhalt, oben aber weiter nach der App.
 	const LINKS = [
 		{ href: '/', label: 'Einkaufszettel', title: 'Familien-Einkauf', icon: ShoppingCartIcon },
+		{ href: '/gundula', label: 'Wo ist Gundula', title: 'Wo ist Gundula', icon: CarIcon },
 		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
 		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
 	];

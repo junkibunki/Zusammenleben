@@ -1,8 +1,12 @@
 <script>
+	import { browser } from '$app/environment';
 	import ImageIcon from '@lucide/svelte/icons/image';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import AlertCircleIcon from '@lucide/svelte/icons/circle-alert';
+	import BellIcon from '@lucide/svelte/icons/bell';
+	import BellOffIcon from '@lucide/svelte/icons/bell-off';
 	import { auth, avatarUrl, updateProfile } from '$lib/pocketbase.svelte.js';
+	import { push, refreshPush, enablePush, disablePush, sendTestPush } from '$lib/push.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
@@ -140,9 +144,33 @@
 			busy = false;
 		}
 	}
+
+	// --- Benachrichtigungen ---
+
+	// Auf dem iPhone gibt es Web Push nur in der installierten PWA. Im
+	// Safari-Tab fehlt PushManager einfach, ohne jeden Hinweis warum.
+	const onIOS = browser && /iPhone|iPad|iPod/.test(navigator.userAgent);
+	let probe = $state('');
+
+	// Holt den tatsaechlichen Zustand aus Browser und Server. Liest bewusst
+	// nichts aus `push`: was ein $effect liest, darf sein eigener Ablauf nicht
+	// schreiben.
+	$effect(() => {
+		refreshPush();
+	});
+
+	async function probePush() {
+		probe = '';
+		const result = await sendTestPush();
+		if (!result) return;
+		probe =
+			result.sent > 0
+				? `Verschickt an ${result.sent} von ${result.subscriptions} Gerät(en).`
+				: 'Kein Gerät hat die Nachricht angenommen.';
+	}
 </script>
 
-<main class="flex-1 px-3 py-4">
+<main class="flex flex-1 flex-col gap-4 px-3 py-4">
 	<Card.Root>
 		<form class="flex flex-col gap-(--card-spacing)" onsubmit={submit}>
 			<Card.Header>
@@ -226,5 +254,82 @@
 				</Button>
 			</Card.Footer>
 		</form>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Benachrichtigungen</Card.Title>
+			<Card.Description>
+				Schreibt jemand etwas auf den Zettel, meldet sich dieses Gerät — auch wenn die App
+				geschlossen ist.
+			</Card.Description>
+		</Card.Header>
+
+		<Card.Content class="flex flex-col gap-4">
+			{#if !push.supported}
+				<Alert.Root>
+					<AlertCircleIcon />
+					<Alert.Description>
+						{#if onIOS}
+							Auf dem iPhone gibt es Benachrichtigungen nur in der installierten App: in Safari
+							über „Teilen“ → „Zum Home-Bildschirm“ hinzufügen und diese Seite dort erneut
+							öffnen.
+						{:else}
+							Dieser Browser kann keine Benachrichtigungen empfangen.
+						{/if}
+					</Alert.Description>
+				</Alert.Root>
+			{:else if push.permission === 'denied'}
+				<Alert.Root variant="destructive">
+					<AlertCircleIcon />
+					<Alert.Description>
+						Benachrichtigungen sind für diese Seite blockiert. Das lässt sich nur in den
+						Einstellungen des Browsers wieder erlauben.
+					</Alert.Description>
+				</Alert.Root>
+			{:else}
+				<p class="text-muted-foreground text-sm">
+					{push.enabled
+						? 'Auf diesem Gerät eingeschaltet.'
+						: 'Auf diesem Gerät ausgeschaltet. Andere Geräte bleiben davon unberührt.'}
+				</p>
+
+				<div class="flex flex-wrap gap-2">
+					{#if push.enabled}
+						<Button
+							variant="outline"
+							size="lg"
+							class="h-11"
+							disabled={push.busy}
+							onclick={disablePush}
+						>
+							<BellOffIcon class="size-4" />
+							Ausschalten
+						</Button>
+						<Button variant="ghost" size="lg" class="h-11" disabled={push.busy} onclick={probePush}>
+							Probe senden
+						</Button>
+					{:else}
+						<Button size="lg" class="h-11" disabled={push.busy} onclick={enablePush}>
+							<BellIcon class="size-4" />
+							Einschalten
+						</Button>
+					{/if}
+				</div>
+			{/if}
+
+			{#if push.error}
+				<Alert.Root variant="destructive">
+					<AlertCircleIcon />
+					<Alert.Description>{push.error}</Alert.Description>
+				</Alert.Root>
+			{/if}
+			{#if probe}
+				<Alert.Root>
+					<CheckIcon />
+					<Alert.Description>{probe}</Alert.Description>
+				</Alert.Root>
+			{/if}
+		</Card.Content>
 	</Card.Root>
 </main>

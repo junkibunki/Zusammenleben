@@ -1,0 +1,33 @@
+- generic [ref=f6e3]:
+  - banner [ref=f6e4]:
+    - generic [ref=f6e5]:
+      - button "Menü öffnen" [ref=f6e6]
+      - heading "Wo ist Gundula" [level=1] [ref=f6e7]
+      - generic [ref=f6e8]: F
+  - alert [ref=f6e69]:
+    - generic [ref=f6e70]: Speichern fehlgeschlagen.
+    - button "Meldung schließen" [ref=f6e72]
+  - main [ref=f6e10]:
+    - generic [ref=f6e11]:
+      - application "Karte mit Gundulas Standort. Tippen wählt einen Platz." [ref=f6e12]:
+        - generic:
+          - generic:
+            - generic "Gundula steht hier" [ref=f6e13] [cursor=pointer]
+            - generic "Vorgeschlagener Platz" [ref=f6e55] [cursor=pointer]
+        - generic:
+          - generic [ref=f6e17]:
+            - button "Zoom in" [ref=f6e18] [cursor=pointer]: +
+            - button "Zoom out" [ref=f6e19] [cursor=pointer]: −
+          - generic [ref=f6e20]:
+            - link "Leaflet" [ref=f6e21] [cursor=pointer]:
+              - /url: https://leafletjs.com
+            - text: "| ©"
+            - link "OpenStreetMap" [ref=f6e26] [cursor=pointer]:
+              - /url: https://www.openstreetmap.org/copyright
+      - button "Karte auf Gundula zentrieren" [ref=f6e27]
+    - generic [ref=f6e28]:
+      - paragraph [ref=f6e29]: Geparkt von Florian Test, heute 14:55
+      - generic [ref=f6e73]:
+        - paragraph [ref=f6e74]: "Gewählter Platz (blau): 48,13791 / 11,57490"
+        - button "Verwerfen" [ref=f6e75]
+      - button "Gundula hier parken" [ref=f6e31]

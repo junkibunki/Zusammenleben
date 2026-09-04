@@ -52,11 +52,11 @@ jobs:
             [ "$(id -u)" -ne 0 ] && SUDO="sudo"
             $SUDO rm -rf "${{ env.TARGET }}/.deploy"
 
-      # Nur diese beiden Ordner. Das Binary wird bewusst nicht mitdeployt
+      # Nur diese drei Ordner. Das Binary wird bewusst nicht mitdeployt
       # (Linux-Release liegt einmalig auf dem Server), pb_data/ ist die
       # Datenbank. Kein `rm: true` -- das wuerde das Zielverzeichnis
       # inklusive pb_data/ vor dem Upload loeschen.
-      - name: pb_public + Migrationen hochladen
+      - name: pb_public + Hooks + Migrationen hochladen
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -64,7 +64,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
-          source: "pb/pb_public/*,pb/pb_migrations/*"
+          source: "pb/pb_public/*,pb/pb_hooks/*,pb/pb_migrations/*"
           target: ${{ env.TARGET }}/.deploy
           strip_components: 1 # schneidet das fuehrende pb/ weg
 
@@ -92,7 +92,7 @@ jobs:
 
             # Vor dem Stoppen pruefen, ob ueberhaupt etwas zum Umschwenken da
             # ist -- sonst steht der Dienst gleich ohne Frontend da.
-            for d in pb_public pb_migrations; do
+            for d in pb_public pb_hooks pb_migrations; do
               if [ ! -d "$T/.deploy/$d" ]; then
                 echo "Upload unvollstaendig: $T/.deploy/$d fehlt."
                 exit 1
@@ -127,6 +127,16 @@ jobs:
             fi
             $SUDO mv "$T/.deploy/pb_public" "$T/pb_public"
             $SUDO rm -rf "$T/pb_public.old"
+
+            # pb_hooks/ genauso: komplett ersetzt, damit keine geloeschte
+            # Hook-Datei auf dem Server weiterlebt. Der Ordner ist Code, keine
+            # Daten -- PocketBase legt hier nichts von sich aus ab.
+            $SUDO rm -rf "$T/pb_hooks.old"
+            if [ -d "$T/pb_hooks" ]; then
+              $SUDO mv "$T/pb_hooks" "$T/pb_hooks.old"
+            fi
+            $SUDO mv "$T/.deploy/pb_hooks" "$T/pb_hooks"
+            $SUDO rm -rf "$T/pb_hooks.old"
 
             $SUDO mkdir -p "$T/pb_migrations"
             $SUDO cp -a "$T/.deploy/pb_migrations/." "$T/pb_migrations/"

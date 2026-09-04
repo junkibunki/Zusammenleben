@@ -36,14 +36,18 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 │   ├── components.json            # shadcn-svelte-Config (Style vega, Basis neutral)
 │   ├── scripts/generate-icons.mjs # skaliert icon-source.png -> static/ (node:zlib)
 │   ├── scripts/icon-source.png    # Bildquelle, absichtlich nicht in static/
+│   ├── scripts/webpush.entry.js   # Quelle der Push-Krypto (RFC 8291 + 8292)
+│   ├── scripts/build-webpush.mjs  # buendelt sie -> pb/pb_hooks/webpush.js
+│   ├── scripts/webpush.test.mjs   # Selbsttest gegen den RFC-Testvektor
 │   ├── static/                    # manifest.webmanifest + icon-32/192/512.png
 │   └── src/
 │       ├── app.html               # PWA-Metas
 │       ├── app.css                # Tailwind-Entry: Design-Tokens hell/dunkel
-│       ├── service-worker.js      # trivialer Pass-through, SvelteKit registriert ihn selbst
+│       ├── service-worker.js      # Pass-through-fetch + push/notificationclick
 │       ├── lib/
 │       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
+│       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
 │       │   ├── components/ui/        # shadcn-svelte, per CLI generiert (nicht haendisch pflegen)
 │       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)
@@ -54,6 +58,10 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ nötig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
+│   ├── pb_hooks/
+│   │   ├── push.pb.js             # Hook-Anmeldungen (Bootstrap, Routen, items)
+│   │   ├── push-lib.js            # Schluessel, Empfaenger, Versand
+│   │   └── webpush.js             # GENERIERT, nicht von Hand aendern
 │   ├── pb_data/                   # gitignored, die SQLite-DB
 │   └── pb_public/                 # gitignored, Build-Output
 ├── .github/workflows/deploy.yml   # Build + Deploy auf den VPS bei Push auf main
@@ -268,7 +276,13 @@ Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Style
 * SvelteKit registriert `src/service-worker.js` im Production-Build automatisch — keine
   eigene Registrierung ins `app.html` schreiben.
 * Der `fetch`-Handler muss existieren (sonst kein Install-Prompt in Chrome), darf aber
-  trivial durchreichen. Kein Caching gewollt.
+  trivial durchreichen. Kein Caching gewollt. Die Handler für `push` und
+  `notificationclick` stehen in derselben Datei — siehe
+  [Web Push](#web-push-benachrichtigungen).
+* **Im Dev-Modus registriert SvelteKit den Worker nicht**, und `navigator.serviceWorker.ready`
+  wartet dann *für immer*, statt zu scheitern. `push.svelte.js` registriert ihn deshalb
+  unter `dev` selbst (`register('/service-worker.js', { type: 'module' })`) — im
+  Produktionsbuild ist derselbe Aufruf ein No-op, weil Scope und URL schon belegt sind.
 * `manifest.webmanifest` wird von PocketBase mit dem MIME-Typ des OS ausgeliefert
   (Windows: `text/plain`, Linux meist `application/manifest+json`). Chrome prüft den
   Manifest-MIME-Typ nicht — kein Handlungsbedarf.
@@ -308,6 +322,97 @@ Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Style
   `sizes`-Attribut halten. Das beweist nebenbei, dass ein *fremder* Dekoder die selbst
   geschriebenen PNGs liest.
 
+## Web Push (Benachrichtigungen)
+
+Ein neuer Eintrag auf dem Zettel löst eine Push-Benachrichtigung an alle *anderen*
+Familienmitglieder aus. Verschickt wird serverseitig aus einem PocketBase-Hook, ganz
+ohne fremden Dienst: Web Push nach **RFC 8291** (Nutzlast als `aes128gcm`) und
+**RFC 8292** (VAPID/ES256). Empfänger sind die Push-Dienste der Browser (FCM, Mozilla
+Autopush, Apple).
+
+* Collection **`push_subscriptions`**: ein Datensatz pro Gerät (`endpoint` mit
+  Unique-Index, `p256dh`, `auth`, `device`). Alle Rules auf `user = @request.auth.id` —
+  jeder verwaltet nur die eigenen Abos, auch beim Anlegen.
+* Collection **`push_config`**: genau ein Record `vapid` mit dem Schlüsselpaar des
+  Servers, beim ersten Start selbst erzeugt. **Ohne API-Rules** (`null` = nur
+  Superuser); der öffentliche Teil kommt über `GET /api/push/key` heraus. Der private
+  Schlüssel liegt im Klartext in `pb_data` — bewusst, dort stehen auch die
+  Passwort-Hashes.
+* Das Schlüsselpaar muss **stabil bleiben**: die Abos der Browser hängen daran. Ein
+  neues Paar (z.B. nach `rm -rf pb_data`) macht jedes vorhandene Abo ungültig; der
+  Push-Dienst antwortet dann mit 403. `refreshPush()` merkt das beim Laden der
+  Profilseite (Vergleich mit `subscription.options.applicationServerKey`) und meldet
+  das Gerät ab, statt „eingeschaltet“ anzuzeigen und still nichts mehr zu liefern.
+* `POST /api/push/test` schickt eine Probe an die *eigenen* Geräte. Ohne so einen Knopf
+  lässt sich die Kette Browser → Push-Dienst → Gerät mit nur einem Gerät nicht prüfen.
+* Ein abgelaufenes Abo (404/410 vom Dienst) wird serverseitig gelöscht — die Tabelle
+  räumt sich selbst auf, wenn jemand die App deinstalliert.
+* **Abmelden muss das Abo mitnehmen.** `logout()` ruft vorher
+  `unsubscribeThisDevice()`; danach fehlt das Token dafür. Ohne das zeigt ein
+  abgemeldetes Gerät weiter jede neue Zeile der Liste an — Abo und Datensatz bleiben ja
+  gültig. Der Import ist dynamisch, sonst gäbe es einen Zyklus
+  (`push.svelte.js` braucht `pb`).
+* Bekannte Grenze: **auf dem iPhone gibt es Web Push nur in der installierten PWA**
+  (iOS 16.4+). In Safari als Tab fehlt `PushManager` einfach — kein Fehler, kein
+  Hinweis. Die Profilseite sagt das darum von sich aus, wenn `supported` false ist und
+  der User-Agent nach iOS aussieht.
+* Nach `npm run test:hooks` läuft der Selbsttest der Krypto gegen den Testvektor aus
+  RFC 8291 §5 — der prüft die Verschlüsselung bytegenau.
+
+### Fallstricke der PocketBase-JS-VM (alle hier real aufgetreten)
+
+* **Ein Hook-Callback sieht den Modulscope seiner Datei nicht.** PocketBase führt jeden
+  Callback in einer eigenen JS-VM aus. Eine Funktion neben dem Hook zu definieren und
+  darin aufzurufen endet in `ReferenceError: <name> is not defined` — und zwar erst zur
+  Laufzeit, beim Bootstrap als stiller Log-Eintrag, bei einer Route als nacktes `400`.
+  Alles Gemeinsame muss in ein Modul, das **innerhalb** des Callbacks geladen wird
+  (`require(`${__hooks}/push-lib.js`)`). Deshalb die Trennung push.pb.js / push-lib.js.
+* **`require()` löst `node_modules` nicht auf**, nur relative Pfade: ein Paket dort
+  abzulegen bringt `GoError: Invalid module`. Deshalb wird die Krypto zu *einer* Datei
+  gebündelt (`frontend/scripts/build-webpush.mjs` → `pb/pb_hooks/webpush.js`, im Repo,
+  damit der Server kein npm braucht).
+* **Binäre Daten gehen nur als `Uint8Array` durch `$http.send`.** Ein „Binärstring“
+  wird beim Übergang nach Go als UTF-8 kodiert — nachgemessen: 6 Bytes
+  (`00 41 80 ff c3 28`) kommen als 9 an (`0041c280c3bfc38328`). Ein `ArrayBuffer` kommt
+  als **leerer** Body an, ohne Fehler. Ein verschlüsselter Push-Body ist damit stiller
+  Datenmüll.
+* **Die JS-VM hat keine WebCrypto** (`crypto` und `TextEncoder` sind `undefined`), also
+  reine JS-Krypto. Zufall kommt aus `$security.randomString` (crypto/rand, aber nur
+  alphanumerisch) und wird per SHA-256 zu gleichverteilten Bytes — der Polyfill steht im
+  Banner des Bundles.
+* **Kein `setTimeout`, keine Goroutine.** Der Versand läuft deshalb synchron im Request
+  des Anlegenden mit. Gemessen: ein `create` mit drei Empfängern dauert 260–470 ms statt
+  ~40 ms. Für eine Familienliste in Ordnung; wer hundert Empfänger hat, braucht einen
+  anderen Weg.
+* **`$security.sha256` & Co. taugen nicht für beliebige Bytes** — dieselbe
+  UTF-8-Falle wie oben. Für ASCII (z.B. das Ergebnis von `randomString`) sind sie in
+  Ordnung.
+* **`app.logger()` schreibt nicht nach stdout**, sondern in die `_logs`-Collection.
+  Ansehen mit `GET /api/logs?perPage=20&sort=-created` als Superuser; die Zeilen
+  erscheinen mit ein paar Sekunden Verzögerung (PocketBase schreibt gebündelt).
+* **`res.body` einer `$http.send`-Antwort ist ein Byte-Array.** Im Log steht dann
+  `"112,101,114,109,..."` statt Text. Vor dem Loggen dekodieren, sonst ist die
+  Fehlermeldung des Push-Dienstes unlesbar — und genau die sagt, was los ist.
+* **Änderungen in `pb_hooks/` wirken erst nach einem Neustart.** PocketBase schreibt nur
+  `File ... changed, please restart the app manually` und läuft mit dem alten Code
+  weiter. Zwei Stunden Fehlersuche wert.
+
+### Signatur: `@noble/curves` v2 hasht selbst
+
+**Symptom:** FCM antwortet `403 permission denied: invalid JWT provided`. Uhr stimmt,
+`aud` stimmt, `exp` liegt innerhalb von 24 h, `sub` ist eine gültige `https:`- bzw.
+`mailto:`-Adresse — und `p256.verify()` bestätigt die eigene Signatur als gültig.
+
+**Ursache:** In `@noble/curves` v2 ist `prehash` in `sign()` **standardmäßig an**. Wer
+`p256.sign(sha256(msg), key)` schreibt, hasht zweimal; die Signatur ist damit nicht
+ES256-konform. `p256.verify(sig, sha256(msg), pub)` macht denselben Fehler ein zweites
+Mal und bestätigt sie — der Test ist also mit sich selbst einig und mit niemandem sonst.
+Richtig ist `p256.sign(msg, key)` (oder `{ prehash: false }` mit dem Hash).
+
+**Lehre fürs nächste Mal:** eine Signatur *nie* mit der Bibliothek prüfen, die sie
+erzeugt hat. `frontend/scripts/webpush.test.mjs` prüft sie darum mit Node WebCrypto —
+das ist die Zeile, die den Fehler gefunden hat.
+
 ## Beim Testen
 
 * **Weiße Seite mit genau einem `TypeError: Cannot read properties of undefined
@@ -326,6 +431,34 @@ Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Style
 * **Der Playwright-MCP lädt nur Dateien aus dem Projektordner hoch.** Symptom:
   `File access denied: … is outside allowed roots`. Testbilder also nicht im Temp-Ordner
   ablegen, sondern im Repo (und hinterher wegräumen).
+* **Der Playwright-MCP-Browser kann von einer *parallelen* Session belegt sein:**
+  `Browser is already in use for …, use --isolated`. Ausweg ohne Warten: Chromium selbst
+  starten und per CDP fahren — die Playwright-Binary liegt unter
+  `%LOCALAPPDATA%\ms-playwright\chromium-*/chrome-win64/chrome.exe`, Node ≥ 22 hat ein
+  globales `WebSocket`, mehr braucht es nicht (`--remote-debugging-port`, dann
+  `/json/list` und `Target.attachToTarget`).
+  Drei Fallen dabei:
+  * **Ohne `--no-sandbox` stirbt der Netzwerkdienst dieses Builds beim Start**
+    („Sandbox cannot access executable … Access is denied", dann „Network service
+    crashed"). Die Seite ist danach ein Fehlerdokument mit *korrekter* URL — `fetch`
+    schlägt fehl und `navigator.serviceWorker` ist `undefined`, was wie ein
+    App-Problem aussieht.
+  * **Ziel über `/json/list` suchen, nicht über `Target.getTargets`.** Chromium führt
+    neben dem Tab eigene WebUI-Seiten als Ziel; hängt man an der falschen, gilt
+    dasselbe Symptom wie oben. `/json/list` liefert die URL mit.
+  * **`ServiceWorker.deliverPushMessage` braucht die Page-Session** (`sessionId`), nicht
+    die Browser-Session — sonst `'ServiceWorker.deliverPushMessage' wasn't found`. Damit
+    lässt sich der `push`-Handler ohne echten Push-Dienst auslösen.
+* **Headless-Chromium bekommt echte FCM-Abos** (`fcm.googleapis.com/preprod/wp/…`), aber
+  das erste `subscribe()` dauert bis zu 30 s, und die Zustellung klappt nicht immer.
+  Kommt keine Meldung an, erst ins `_logs` schauen: steht dort kein „Push abgelehnt",
+  hat der Dienst die Nachricht angenommen und es ist ein Headless-Effekt.
+* **Ein mit `(cmd &)` in den Hintergrund geschickter Server überlebt den Bash-Aufruf
+  nicht.** Symptom: Minuten später schlagen alle Requests fehl, und im Browser sieht man
+  genau die Symptome des `--no-sandbox`-Falls oben (kein `fetch`, kein Service Worker) —
+  weil die Seite nur eine Fehlerseite ist. PocketBase für Tests deshalb über das
+  `run_in_background` des Bash-Tools starten und mit `/api/health` prüfen, *bevor* man
+  einem Browserergebnis glaubt.
 * **Umlaute in Bash-`curl`-Payloads werden auf Windows zerlegt** und PocketBase antwortet
   mit einem nichtssagenden `400`. Für Requests mit Umlauten (z.B. `category:"Obst/Gemüse"`)
   `node -e "fetch(...)"` benutzen, Token per Env-Variable übergeben.

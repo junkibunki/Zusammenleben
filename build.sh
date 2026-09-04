@@ -14,4 +14,8 @@ mkdir -p "$ROOT/pb/pb_public"
 
 npm run build
 
+# pb/pb_hooks/webpush.js liegt im Repo, damit der Server kein npm braucht --
+# hier neu erzeugt, damit es nicht hinter seiner Quelle zurueckbleibt.
+npm run build:hooks
+
 echo "Fertig: $ROOT/pb/pb_public"

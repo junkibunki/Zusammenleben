@@ -62,9 +62,16 @@ dadurch gibt es lokal kein CORS und dieselbe Origin-Situation wie in Produktion.
 ./build.sh
 ```
 
-Schreibt das fertige SPA nach `pb/pb_public/`. PocketBase serviert diesen Ordner
-automatisch inklusive SPA-Fallback auf `index.html`.
+Schreibt das fertige SPA nach `pb/pb_public/` und erzeugt dabei auch
+`pb/pb_hooks/webpush.js` neu (das gebündelte Krypto-Modul für die
+Benachrichtigungen – es liegt im Repo, damit der Server kein npm braucht).
+PocketBase serviert `pb_public/` automatisch inklusive SPA-Fallback auf `index.html`.
 Danach ist alles unter `http://127.0.0.1:8090/` erreichbar – Frontend und API.
+
+> [!NOTE]
+> Änderungen in `pb/pb_hooks/` wirken erst nach einem **Neustart** von PocketBase.
+> Der Server schreibt dann nur `File ... changed, please restart the app manually`
+> und läuft mit dem alten Code weiter.
 
 ---
 
@@ -103,6 +110,18 @@ Zeile „Jemand“.
 Jede Zeile zeigt darunter klein und ausgegraut, wer den Eintrag wann hinzugefügt hat
 (`added_by` + `created`); bei erledigten Einträgen zusätzlich „gekauft von …“
 (`done_by`). Das Datum ist am selben Tag „heute 19:41“, sonst „3. Sept. 19:41“.
+
+Für die Benachrichtigungen kommen zwei weitere Collections dazu (Migration
+`1756000010_push_subscriptions.js`):
+
+| Collection            | Zweck                                                                     |
+| --------------------- | ------------------------------------------------------------------------- |
+| `push_subscriptions`  | Ein Datensatz je Gerät: `endpoint` (unique), `p256dh`, `auth`, `device`    |
+| `push_config`         | Ein Record `vapid` mit dem Schlüsselpaar des Servers, selbst erzeugt       |
+
+`push_subscriptions` ist auf `user = @request.auth.id` beschränkt – jeder sieht und
+verwaltet nur die eigenen Geräte. `push_config` hat gar keine Rules und ist damit nur
+für den Admin sichtbar.
 
 ---
 
@@ -367,16 +386,50 @@ korrekt ausgeliefert.
 
 ---
 
+## Benachrichtigungen
+
+Schreibt jemand etwas auf den Zettel, bekommen **alle anderen** eine Push-Meldung –
+auch wenn die App geschlossen ist. Der Text ist z.B. „Neu: Möhren · 2 Bund“ mit
+„Supermarkt · von Anna“ darunter; ein Tippen darauf öffnet die Liste.
+
+Einschalten muss das **jedes Gerät für sich**, unter *Profil → Benachrichtigungen*.
+Dort steht auch ein Knopf **„Probe senden“**, der eine Testmeldung an die eigenen
+Geräte schickt – damit lässt sich ohne zweite Person prüfen, ob es funktioniert.
+
+- **iPhone/iPad:** Web Push gibt es dort nur in der **installierten** App (iOS 16.4+).
+  Also erst in Safari über *Teilen → Zum Home-Bildschirm* hinzufügen und die App von
+  dort öffnen; im normalen Safari-Tab fehlt der Knopf, und die Seite sagt warum.
+- Wer versehentlich „Blockieren“ getippt hat, kann das nur in den Einstellungen des
+  Browsers zurücknehmen – die Seite darf nicht nochmal fragen.
+- Abmelden meldet das Gerät automatisch wieder ab.
+
+Es braucht **keinen** externen Dienst und keine Konfiguration: der Server erzeugt sein
+VAPID-Schlüsselpaar beim ersten Start selbst und legt es in der Datenbank ab.
+
+> [!IMPORTANT]
+> Das Schlüsselpaar liegt in `pb_data`. Wird die Datenbank neu aufgesetzt, entsteht ein
+> neues Paar und **alle vorhandenen Abos werden ungültig**. Die App merkt das beim
+> nächsten Öffnen der Profilseite und zeigt „ausgeschaltet“ an; einmal neu einschalten,
+> dann läuft es wieder.
+
+Technisch: Web Push nach RFC 8291/8292, verschickt aus einem PocketBase-Hook
+(`pb/pb_hooks/`). Die Krypto ist ein gebündeltes Modul, das mit `./build.sh` bzw.
+`npm run build:hooks` neu erzeugt wird; `npm run test:hooks` prüft sie gegen den
+Testvektor aus dem RFC.
+
+---
+
 ## Frontend-Aufbau
 
 ```
 frontend/src/
 ├── app.html                   # PWA-Metas: manifest, apple-touch-icon, viewport-fit
 ├── app.css                    # globales CSS, mobile-first
-├── service-worker.js          # trivialer Pass-through-Handler
+├── service-worker.js          # Pass-through-fetch + push / notificationclick
 ├── lib/
 │   ├── pocketbase.svelte.js   # PB-Client + reaktiver authStore-Spiegel
-│   └── items.svelte.js        # $state der Liste + Realtime-Subscription
+│   ├── items.svelte.js        # $state der Liste + Realtime-Subscription
+│   └── push.svelte.js         # Benachrichtigungen an-/abmelden
 └── routes/
     ├── +layout.js             # ssr = false, prerender = false
     ├── +layout.svelte         # Auth-Guard / Redirects
@@ -412,6 +465,28 @@ End-to-End gegen PocketBase 0.40.2, Frontend aus `pb/pb_public` vom selben Proze
   und „Abmelden“ ebenfalls 44px. Kein horizontales Scrollen bei 390px Breite.
 * Service Worker registriert und aktiv, SPA-Fallback (`/login` direkt aufgerufen)
   liefert `200 text/html`.
+
+### Benachrichtigungen
+
+* Die Verschlüsselung stimmt **bytegenau** mit dem Testvektor aus RFC 8291 §5 überein –
+  in Node wie in PocketBases JS-VM (`npm run test:hooks`).
+* Die VAPID-Signatur wird von **Node WebCrypto** geprüft, also von einer anderen
+  Implementierung als der, die sie erzeugt. Genau daran hing ein Fehler, den die
+  eigene Bibliothek nicht gesehen hat.
+* Gegen einen simulierten Push-Dienst: Anlegen eines Eintrags erzeugt genau einen
+  Push je fremdem Gerät, der Verfasser bekommt keinen, die Nachricht lässt sich mit
+  dem Geräteschlüssel wieder **entschlüsseln** (Umlaute und Emoji inklusive), und ein
+  Endpoint, der `410` antwortet, verschwindet danach aus der Datenbank.
+* Rechte: ein Abo für einen *fremden* Account anzulegen wird abgelehnt, ein zweiter
+  Datensatz mit demselben `endpoint` ebenfalls.
+* Gegen den **echten** Dienst (FCM): Chromium abonniert, ein anderer Nutzer legt einen
+  Eintrag an, die Meldung „Neu: Spülmaschinentabs / Drogerie · von Bert Test“
+  erscheint im Browser.
+* Im Service Worker: Push mit Nutzlast zeigt Titel, Text, Tag und Icon; ein Push
+  **ohne** Nutzlast zeigt trotzdem eine Ersatzmeldung (`userVisibleOnly` verlangt das).
+* Ein-/Ausschalten und Abmelden räumen den Datensatz und das Abo im Browser weg; ein
+  Abo, das zu einem alten VAPID-Schlüssel gehört, wird beim Laden erkannt und
+  abgemeldet, statt „eingeschaltet“ anzuzeigen.
 
 ---
 

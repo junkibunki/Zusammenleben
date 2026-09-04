@@ -1,0 +1,248 @@
+/// <reference path="../pb_data/types.d.ts" />
+
+// Serverseite von Web Push: Schluessel verwalten, Empfaenger suchen, senden.
+//
+// Warum das nicht in push.pb.js steht: PocketBase fuehrt jeden Hook-Callback in
+// einer eigenen JS-VM aus, die den Modulscope der Hook-Datei nicht kennt. Eine
+// Funktion neben dem Hook zu definieren und darin aufzurufen endet in
+// `ReferenceError: <name> is not defined`. Alles Gemeinsame muss also in ein
+// Modul, das *innerhalb* des Callbacks geladen wird.
+//
+// Die Krypto steckt in webpush.js (generiert, siehe frontend/scripts/).
+
+const webpush = require(`${__hooks}/webpush.js`);
+
+const CONFIG_ID = 'vapid';
+
+// Der Versand laeuft synchron im Request des Anlegenden mit -- die JS-VM hat
+// kein setTimeout und keine Goroutine. Deshalb zwei Grenzen: eine pro Dienst
+// und eine fuer alles zusammen, damit ein paar unerreichbare Geraete nicht den
+// "Hinzufuegen"-Knopf minutenlang drehen lassen.
+const SEND_TIMEOUT = 3; // Sekunden pro Push-Dienst
+const TOTAL_BUDGET = 9000; // Millisekunden fuer alle Empfaenger zusammen
+
+/**
+ * Kontaktadresse fuer den Push-Dienst (RFC 8292 verlangt https: oder mailto:).
+ * Bewusst bei jedem Versand neu bestimmt und *nicht* gespeichert: sonst friert
+ * der Wert von dem Rechner ein, auf dem die Schluessel entstanden sind -- eine
+ * Dev-Instanz wuerde `mailto:admin@localhost` fuer immer mitschleppen, und
+ * Apple ist beim `sub` streng.
+ */
+function subject(app) {
+	const url = app.settings().meta.appURL || '';
+	if (url.indexOf('https://') === 0) return url;
+
+	try {
+		const admins = app.findAllRecords('_superusers');
+		if (admins.length > 0) return `mailto:${admins[0].getString('email')}`;
+	} catch {
+		// Ohne Superuser laeuft PocketBase nicht -- reiner Sicherheitsgurt.
+	}
+	return 'mailto:admin@localhost';
+}
+
+/**
+ * Die VAPID-Schluessel des Servers; legt sie beim ersten Aufruf an.
+ * Sie muessen stabil bleiben: die Abos der Browser sind an den oeffentlichen
+ * Schluessel gebunden und werden mit einem neuen Paar alle ungueltig.
+ */
+function vapid(app) {
+	try {
+		return app.findRecordById('push_config', CONFIG_ID);
+	} catch {
+		// Noch keine Schluessel -- unten anlegen.
+	}
+
+	const keys = webpush.generateVapidKeys();
+	const record = new Record(app.findCollectionByNameOrId('push_config'));
+	record.set('id', CONFIG_ID);
+	record.set('public_key', keys.publicKey);
+	record.set('private_key', keys.privateKey);
+	app.save(record);
+
+	app.logger().info('VAPID-Schluesselpaar fuer Web Push erzeugt');
+	return record;
+}
+
+/** Der oeffentliche Schluessel, den pushManager.subscribe() im Browser braucht. */
+function publicKey(app) {
+	return vapid(app).getString('public_key');
+}
+
+/**
+ * Schickt eine Nachricht an ein Abo. Liefert true, wenn der Dienst sie
+ * angenommen hat.
+ *
+ * Ein Abo, das der Dienst nicht mehr kennt (404/410) oder nicht mehr zu unserem
+ * Schluessel passt (403), wird geloescht: der Datensatz ist unbrauchbar, und
+ * beim naechsten Oeffnen der App legt der Browser ein frisches an. So raeumt
+ * sich die Tabelle selbst auf.
+ */
+function sendTo(app, subscription, message, config, from) {
+	const endpoint = subscription.getString('endpoint');
+
+	const request = webpush.buildRequest({
+		endpoint,
+		p256dh: subscription.getString('p256dh'),
+		auth: subscription.getString('auth'),
+		payload: JSON.stringify(message),
+		publicKey: config.getString('public_key'),
+		privateKey: config.getString('private_key'),
+		subject: from
+	});
+
+	const res = $http.send({
+		url: request.url,
+		method: request.method,
+		// Bewusst das Uint8Array: als String wuerde die JS-VM die Bytes als
+		// UTF-8 kodieren und der Push-Dienst bekaeme Datenmuell.
+		body: request.body,
+		headers: request.headers,
+		timeout: SEND_TIMEOUT
+	});
+
+	if (res.statusCode === 403 || res.statusCode === 404 || res.statusCode === 410) {
+		app.delete(subscription);
+		app.logger().info(
+			'Unbrauchbares Push-Abo entfernt',
+			'status',
+			res.statusCode,
+			'endpoint',
+			endpoint
+		);
+		return false;
+	}
+
+	if (res.statusCode < 200 || res.statusCode > 299) {
+		app.logger().warn(
+			'Push abgelehnt',
+			'status',
+			res.statusCode,
+			'endpoint',
+			endpoint,
+			// toString(), nicht String(): res.body ist ein Byte-Array und wuerde
+			// sonst als "112,101,114,..." im Log stehen -- unlesbar genau dort, wo
+			// der Dienst den Grund nennt.
+			'antwort',
+			toString(res.body, 200)
+		);
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Verschickt `message` an alle uebergebenen Abos und liefert die Zahl der
+ * angenommenen. Fehler bei einem Empfaenger duerfen die anderen nicht
+ * aufhalten und schon gar nicht den Request sprengen, in dem das mitlaeuft.
+ */
+function broadcast(app, subscriptions, message) {
+	if (subscriptions.length === 0) return 0;
+
+	const config = vapid(app);
+	const from = subject(app);
+	const started = Date.now();
+	let sent = 0;
+
+	for (let i = 0; i < subscriptions.length; i++) {
+		if (Date.now() - started > TOTAL_BUDGET) {
+			app.logger().warn(
+				'Push-Versand abgebrochen, Zeitbudget erschoepft',
+				'verschickt',
+				sent,
+				'uebersprungen',
+				subscriptions.length - i
+			);
+			break;
+		}
+
+		try {
+			if (sendTo(app, subscriptions[i], message, config, from)) sent++;
+		} catch (err) {
+			app.logger().warn(
+				'Push fehlgeschlagen',
+				'endpoint',
+				subscriptions[i].getString('endpoint'),
+				'fehler',
+				String(err)
+			);
+		}
+	}
+	return sent;
+}
+
+/** Anzeigename eines Users -- dieselbe Logik wie im Frontend. */
+function userLabel(app, id) {
+	if (!id) return '';
+	try {
+		const user = app.findRecordById('users', id);
+		return user.getString('name') || user.getString('email').split('@')[0] || 'Jemand';
+	} catch {
+		return ''; // z.B. geloeschter Account
+	}
+}
+
+/** Probebenachrichtigung an alle Geraete *einer* Person. */
+function sendTest(app, userId) {
+	const subscriptions = app.findRecordsByFilter(
+		'push_subscriptions',
+		'user = {:uid}',
+		'-created',
+		50,
+		0,
+		{ uid: userId }
+	);
+
+	const sent = broadcast(app, subscriptions, {
+		title: 'Probebenachrichtigung',
+		body: 'Wenn du das siehst, funktionieren die Benachrichtigungen.',
+		tag: 'einkauf-test',
+		url: '/'
+	});
+
+	return { subscriptions: subscriptions.length, sent };
+}
+
+/**
+ * Ein neuer Eintrag auf dem Zettel -- alle ausser dem Verfasser bekommen ihn.
+ *
+ * `actorId` ist der *angemeldete* Nutzer aus dem Request, nicht das Feld
+ * `added_by`: dem Feld kann ein Client jede beliebige ID mitgeben, und dann
+ * bekaeme der Anlegende die eigene Meldung und ein anderer keine.
+ */
+function notifyNewItem(app, record, actorId) {
+	const author = actorId || record.getString('added_by');
+
+	// Wer den Eintrag geschrieben hat, weiss es schon. Ist niemand bekannt
+	// (z.B. serverseitig angelegt), trifft der Filter alle -- `user` ist
+	// required, steht also nie auf "".
+	const subscriptions = app.findRecordsByFilter(
+		'push_subscriptions',
+		'user != {:uid}',
+		'-created',
+		200,
+		0,
+		{ uid: author }
+	);
+
+	const name = record.getString('name');
+	const quantity = record.getString('quantity');
+	// Fuer den *Text* zaehlt, was in der Liste steht -- also `added_by`.
+	const from = userLabel(app, record.getString('added_by'));
+
+	const details = [];
+	if (record.getString('category')) details.push(record.getString('category'));
+	if (from) details.push(`von ${from}`);
+
+	return broadcast(app, subscriptions, {
+		title: `Neu: ${quantity ? `${name} · ${quantity}` : name}`,
+		body: details.join(' · '),
+		// Ein Tag pro Eintrag: zwei neue Sachen ergeben zwei Meldungen, derselbe
+		// Eintrag (Wiederholung durch den Push-Dienst) nur eine.
+		tag: `einkauf-item-${record.id}`,
+		url: '/'
+	});
+}
+
+module.exports = { vapid, publicKey, broadcast, sendTest, notifyNewItem };
