@@ -211,12 +211,16 @@ Einmalig einzurichten:
    nie angelaufen. Die Ursache loggt systemd: `journalctl -u pocketbase` zeigt dann
    `Failed to locate executable ...` bzw. `Failed at step EXEC`.
 2. **systemd-Unit einrichten** (siehe oben).
-3. **`TARGET` im Workflow auf das `WorkingDirectory` der Unit setzen.** Die beiden
-   *müssen* übereinstimmen, sonst lädt der Deploy am laufenden Dienst vorbei und nichts
-   ändert sich sichtbar. Nachsehen mit:
+3. **`TARGET` und `DOMAIN` im Workflow an die Unit angleichen.** `TARGET` muss dem
+   `WorkingDirectory` entsprechen, sonst lädt der Deploy am laufenden Dienst vorbei und
+   nichts ändert sich sichtbar. `DOMAIN` muss die Domain aus dem `ExecStart` sein: nur
+   für die hat PocketBase ein Zertifikat, und der Healthcheck am Ende des Deploys fragt
+   genau diese Adresse ab (per `--resolve` auf `127.0.0.1`, also ohne Umweg über DNS).
+   Steht dort ein anderer Name, scheitert der TLS-Handshake und der Deploy geht rot,
+   obwohl die App einwandfrei läuft. Nachsehen mit:
 
    ```bash
-   systemctl show pocketbase -p WorkingDirectory
+   systemctl show pocketbase -p WorkingDirectory -p ExecStart
    ```
 
 4. **SSH-Key-Login einrichten.** Ein VPS kommt in der Regel mit Passwort-Login; die

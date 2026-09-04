@@ -32,17 +32,20 @@ Deploy für Menschen); hier steht, was beim Arbeiten am Code stolpert.
 /
 ├── frontend/                      # SvelteKit, Svelte 5 Runes, SPA
 │   ├── svelte.config.js           # adapter-static, Output -> ../pb/pb_public
-│   ├── vite.config.js             # Dev-Proxy /api + /_ -> 127.0.0.1:8090
+│   ├── vite.config.js             # Tailwind-Plugin + Dev-Proxy /api + /_ -> :8090
+│   ├── components.json            # shadcn-svelte-Config (Style vega, Basis neutral)
 │   ├── scripts/generate-icons.mjs # PNG-Icons ohne Dependencies (node:zlib)
 │   ├── static/                    # manifest.webmanifest + 3 Icons
 │   └── src/
 │       ├── app.html               # PWA-Metas
-│       ├── app.css                # globales CSS, mobile-first
+│       ├── app.css                # Tailwind-Entry: Design-Tokens hell/dunkel
 │       ├── service-worker.js      # trivialer Pass-through, SvelteKit registriert ihn selbst
 │       ├── lib/
 │       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
-│       │   └── Nav.svelte            # Topbar + Burgermenue (Links, Logout)
+│       │   ├── utils.js              # cn() = clsx + tailwind-merge
+│       │   ├── components/ui/        # shadcn-svelte, per CLI generiert (nicht haendisch pflegen)
+│       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)
 │       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
 │                                  # Rahmen mit Nav), +page.svelte (Liste),
 │                                  # profile/+page.svelte, login/+page.svelte
@@ -143,6 +146,57 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   die zeigen `item.expand.added_by.name` aus dem Cache. Beim nächsten Betreten der Liste
   (`syncItems()` lädt neu) steht der neue Name da.
 
+## Designsystem: Tailwind v4 + shadcn-svelte
+
+Alle UI-Bausteine kommen aus **shadcn-svelte** (Style `vega`, Basisfarbe `neutral`), das
+Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Styles mehr.
+
+* **`shadcn` und `shadcn-svelte` sind zwei Projekte.** `shadcn/ui` ist React-only; für
+  Svelte gilt `shadcn-svelte` (eigene CLI, eigene Registry, Unterbau `bits-ui`).
+* **Komponenten nicht von Hand pflegen.** `src/lib/components/ui/**` ist CLI-Output.
+  Nachziehen mit `npx shadcn-svelte add <name>` (`-o` überschreibt). Eigene Anpassungen
+  gehören in die aufrufende Seite, nicht in die generierte Datei.
+* **`shadcn-svelte init` läuft nicht ohne TTY durch.** Symptom: `--preset default` (oder
+  jeder Name aus der Liste) wird mit „is not a valid preset" abgelehnt, danach fragt die
+  CLI interaktiv und hängt. `--preset` erwartet keinen Namen, sondern den Code von
+  `shadcn-svelte.com/create`. Ausweg: `components.json` selbst schreiben — `add` braucht
+  nur diese Datei und kennt `-y`. Die Registry liegt unter
+  `https://shadcn-svelte.com/registry/styles/<style>/<komponente>.json`, die Farb-Tokens
+  unter `…/registry/colors/<basisfarbe>.json` (daraus ist `app.css` erzeugt).
+* **Kein `tailwind.config.js` mehr.** Tailwind v4 konfiguriert sich in `app.css`:
+  `@import 'tailwindcss'`, Tokens als CSS-Variablen, `@theme inline` bildet sie auf
+  Utility-Namen ab (`--color-card` → `bg-card`), `@utility` definiert eigene (hier
+  `safe-t` / `safe-b` für die iPhone-Safe-Areas).
+* **Dark Mode über `prefers-color-scheme` braucht eine eigene `@custom-variant`.** Die
+  shadcn-Vorgabe ist `@custom-variant dark (&:is(.dark *))`, also ein Klassenschalter.
+  Ohne Umstellung auf `@custom-variant dark (@media (prefers-color-scheme: dark))` greifen
+  die `dark:`-Utilities *in den generierten Komponenten* nie — die Tokens schalten, die
+  Feinheiten (z.B. `dark:bg-input/30`) nicht. Symptom: dunkel sieht fast richtig aus,
+  einzelne Flächen bleiben hell.
+* **Ein `<form>` um `Card.Header`/`Content`/`Footer` frisst die Abstände.** `Card.Root`
+  ist `flex flex-col gap-(--card-spacing)`; die Abschnitte haben selbst nur waagerechtes
+  Padding. Sitzt ein Wrapper dazwischen, klebt der Inhalt aneinander (Symptom: Label
+  direkt unter der Description). Der Wrapper muss die Rhythmik übernehmen:
+  `<form class="flex flex-col gap-(--card-spacing)">`.
+* **Die `Checkbox` von bits-ui ist ein `<button role="checkbox">`.** Ein verstecktes
+  `<input type="checkbox">` rendert sie nur, wenn `name` gesetzt ist. Ein `<label>` drumherum
+  schaltet sie also nicht zuverlässig (und kann bei einem gelabelten Button doppelt
+  auslösen). Deshalb in der Liste: Checkbox trägt den zugänglichen Namen
+  (`aria-label={item.name}`), der antippbare Rest der Zeile ist ein eigener Button mit
+  `tabindex="-1"` und `aria-hidden` — ein Bedienelement für Screenreader, zwei
+  Trefferflächen für den Daumen.
+* **Für einen Datei-Dialog reicht ein Button.** `<input type="file" class="hidden">` plus
+  `onclick={() => input?.click()}` am shadcn-`Button`: die Tastatur bedient den Button,
+  das Feld selbst bleibt aus der Tab-Reihenfolge. Das löst denselben Fall wie früher der
+  fokussierbare 1px-Input, mit weniger CSS.
+* **Tap-Targets kommen nicht von allein.** shadcn ist für die Maus gebaut (`h-9`, ~36px).
+  Auf den Eingabefeldern und Hauptbuttons dieser App steht deshalb `class="h-11"` bzw.
+  `size="lg"` — 44px, wie vorher über `--tap`.
+* Der `vega`-Preset nennt Inter als Schrift; das ist hier **nicht** eingebunden.
+  Tailwinds eigenes `--font-sans` ist bereits ein System-Stack
+  (`-apple-system, BlinkMacSystemFont, 'Segoe UI', …`) — kein Webfont, kein
+  Fremd-Request, dieselbe Optik wie vor dem Umbau.
+
 ## PWA
 
 * SvelteKit registriert `src/service-worker.js` im Production-Build automatisch — keine
@@ -183,7 +237,7 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   PocketBase sucht `pb_public/`, `pb_migrations/` und `pb_data/` relativ dazu. Prüfen mit
   `systemctl show pocketbase -p WorkingDirectory`.
 * **`status=203/EXEC` heißt nicht, dass PocketBase abgestürzt ist.** Symptom: der
-  Healthcheck läuft in zehn `curl: (7) Failed to connect`, `systemctl status` zeigt
+  Healthcheck läuft in lauter `curl: (7) Failed to connect`, `systemctl status` zeigt
   `Active: activating (auto-restart)` und `code=exited, status=203/EXEC`. Ursache: systemd
   konnte die Datei aus `ExecStart` gar nicht erst ausführen — sie fehlt, hat kein Exec-Bit
   oder ist der falsche Build (Windows-`.exe`, falsche Architektur). Von PocketBase selbst
@@ -197,9 +251,21 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   doch, schreibt der Deploy in ein Verzeichnis, in dem PocketBase noch nie gelaufen ist —
   also am Dienst vorbei oder auf einen Server ohne Installation.
 * **`curl -fsS http://127.0.0.1/api/health` als Healthcheck taugt nicht.** Läuft
-  PocketBase mit `--https`, antwortet Port 80 mit einem 301; `curl -f` wertet das als
-  Erfolg, ohne die API je erreicht zu haben. `-L` folgt dem Redirect, `-k` akzeptiert das
-  Domain-Zertifikat auf `127.0.0.1`.
+  PocketBase mit `--https`, antwortet Port 80 mit einem 302; `curl -f` wertet das als
+  Erfolg, ohne die API je erreicht zu haben.
+* **`-L` reicht nicht, und `-k` hilft nicht.** Symptom: der Healthcheck läuft in lauter
+  `curl: (35) TLS connect error: error:0A000438:SSL routines::tlsv1 alert internal error`,
+  während `systemctl status` `active (running)` zeigt und die Seite von außen
+  einwandfrei antwortet. Ursache: PocketBase leitet unter Beibehaltung des Host-Headers
+  um, aus `http://127.0.0.1/api/health` wird also `https://127.0.0.1/api/health`. Zu
+  einer IP-Adresse schickt curl keine SNI, und ohne Servernamen findet PocketBases
+  Autocert kein Zertifikat und bricht den Handshake mit einem fatalen Alert ab. Das
+  passiert **serverseitig, vor jeder Zertifikatsprüfung** — deshalb ändert `-k` nichts.
+  Nachstellen von außen: `curl -k https://<IP>/api/health` schlägt genauso fehl,
+  `https://<domain>/api/health` nicht. Lösung: die Domain anfragen und die Verbindung
+  per `--resolve "$DOMAIN:443:127.0.0.1"` auf Loopback zwingen — richtige SNI, gültiges
+  Zertifikat, kein Umweg über DNS. `-k` bleibt trotzdem stehen — geprüft werden soll,
+  ob die API antwortet, nicht ob die Kette auf genau diesem Server verifizierbar ist.
 * **`systemctl is-active` sagt bei `Type=simple` nichts aus.** Die Unit ist "active",
   sobald der Prozess geforkt ist — eine gescheiterte Migration sieht man daran nicht.
 * **`set -e` bricht bei `[ "$(id -u)" -ne 0 ] && SUDO="sudo"` *nicht* ab**, auch wenn der

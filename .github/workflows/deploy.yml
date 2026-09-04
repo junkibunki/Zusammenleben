@@ -13,6 +13,10 @@ env:
   # Muss dem WorkingDirectory der systemd-Unit entsprechen:
   #   systemctl show pocketbase -p WorkingDirectory
   TARGET: /var/www/mein-projekt
+  # Muss der Domain aus dem ExecStart der systemd-Unit entsprechen -- nur fuer
+  # diesen Namen hat PocketBase ein Zertifikat:
+  #   systemctl show pocketbase -p ExecStart
+  DOMAIN: gruenerfreund.de
 
 jobs:
   deploy:
@@ -80,6 +84,7 @@ jobs:
           script: |
             set -e
             T="${{ env.TARGET }}"
+            DOMAIN="${{ env.DOMAIN }}"
 
             # Funktioniert als root wie auch mit eigenem Service-User.
             SUDO=""
@@ -132,16 +137,24 @@ jobs:
             # `systemctl is-active` meldet bei Type=simple schon "active",
             # bevor PocketBase ueberhaupt gebootet hat -- eine gescheiterte
             # Migration faellt damit nicht auf. Deshalb die API fragen.
-            # -L folgt dem Redirect von Port 80 auf HTTPS, -k akzeptiert das
-            # Domain-Zertifikat auf 127.0.0.1.
-            for i in $(seq 1 10); do
-              if curl -fsSLk http://127.0.0.1/api/health > /dev/null; then
-                echo "PocketBase antwortet."
+            # Angefragt wird die Domain -- nur fuer die hat PocketBase ein
+            # Zertifikat; --resolve schickt die Verbindung trotzdem auf die
+            # Loopback-Adresse statt ueber DNS nach draussen. -k bleibt drin:
+            # gefragt ist, ob die API antwortet, nicht ob die Zertifikatskette
+            # auf diesem Server pruefbar ist. Timeout pro Versuch, damit ein
+            # haengender Handshake die Schleife nicht sprengt.
+            for i in $(seq 1 20); do
+              if curl -fsSk --connect-timeout 3 --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/api/health" > /dev/null; then
+                echo "PocketBase antwortet (Versuch $i)."
                 exit 0
               fi
-              sleep 2
+              if [ "$i" -lt 20 ]; then
+                sleep 2
+              fi
             done
 
-            echo "PocketBase antwortet nach 20s nicht:"
+            echo "PocketBase antwortet nach 20 Versuchen nicht unter https://$DOMAIN/api/health."
+            echo "Moegliche Ursachen: DOMAIN passt nicht zum ExecStart der Unit, oder"
+            echo "PocketBase holt beim allerersten Start noch sein ACME-Zertifikat."
             $SUDO systemctl status pocketbase --no-pager || true
             exit 1
