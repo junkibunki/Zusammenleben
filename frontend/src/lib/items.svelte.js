@@ -1,4 +1,5 @@
 import { pb } from './pocketbase.svelte.js';
+import { maybeFly } from './easteregg.svelte.js';
 
 // Wo eingekauft werden soll. Die Werte muessen mit dem select-Feld
 // `items.category` uebereinstimmen (Migration 1756000005).
@@ -133,6 +134,10 @@ export async function addItem(name, category = DEFAULT_CATEGORY) {
 	);
 
 	if (!store.items.some((i) => i.id === record.id)) store.items.push(record);
+
+	// Osterei: nur beim Anlegenden, nicht ueber die Realtime-Subscription -- sonst
+	// wuerfelt jedes Geraet fuer denselben Eintrag noch einmal mit.
+	maybeFly();
 }
 
 export async function toggleItem(item) {

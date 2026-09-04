@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/pocketbase.svelte.js';
 	import Nav from '$lib/Nav.svelte';
+	import Dragon from '$lib/Dragon.svelte';
 
 	let { children } = $props();
 
@@ -22,5 +23,7 @@
 	<div class="safe-b mx-auto flex min-h-dvh w-full max-w-2xl flex-col">
 		<Nav />
 		{@render children()}
+		<!-- Osterei. Liegt `fixed` ueber allem und faengt keinen Tap ab. -->
+		<Dragon />
 	</div>
 {/if}

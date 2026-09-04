@@ -78,6 +78,19 @@ für es verschiedene Gruppen sind. Also über dieselbe Variante setzen:
   falsch, sobald `env(safe-area-inset-top)` nicht 0 ist: in der installierten iOS-PWA
   wandert der Header nach unten, die Leiste bleibt oben und verschwindet beim Scrollen
   dahinter. (Nachgemessen mit simuliertem 47px-Inset: Header 104px, Leiste bei 104px.)
+* **Ein Zustand, den `animationend` zurücksetzt, bleibt irgendwann hängen.** Symptom
+  wäre: eine einmalige Animation läuft genau einmal und danach nie wieder, ohne Fehler und
+  ohne Log. Ursache: der Browser hält CSS-Animationen in einem unsichtbaren Tab an, das
+  Event kommt also nie — dasselbe, wenn das Element vor dem Ende ausgehängt oder per
+  `display:none` versteckt wird (z.B. `prefers-reduced-motion`, nachträglich umgestellt).
+  Wer `animationend` als Signal nutzt, braucht daneben einen Timer als Notbremse
+  (`easteregg.svelte.js`: 8 s, in `landed()` gecleart). Hier vorbeugend behandelt, nicht
+  beobachtet — deshalb ist es leicht zu übersehen.
+* **Wer über der Karte liegen will, muss über Leaflet liegen.** Leaflet vergibt Panes und
+  Controls z-index bis 1000. Der Kartenrahmen auf der Gundula-Seite hat deshalb `isolate`;
+  nur dadurch genügt einem Overlay darüber ein kleiner z-index. Fehlt das `isolate`
+  irgendwann, verschwindet ein `fixed`-Element mit `z-40` hinter den Kartenkacheln —
+  sichtbar nur auf dieser einen Seite.
 * **`theme-color` zweimal setzen**, je `prefers-color-scheme` — sonst bleibt die
   Browserleiste hell, während die App fast schwarz ist. Manifest und Icon-Skript kennen
   weder `oklch` noch Variablen, dort stehen die Tokens als Hex (`#ffffff`, `#0a0a0a`,

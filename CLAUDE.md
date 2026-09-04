@@ -60,7 +60,7 @@ kurze Datei als ein siebter Absatz in einer fremden.
 * Messwerte nur, wenn sie das Erkennen tragen (`?thumb=200x200` → 5,6 KB vs. 7,9 KB), nicht
   als Beleg dafür, dass gemessen wurde.
 * Wird ein Abschnitt beim Ergänzen länger als ~80 Zeilen, teile ihn auf, statt ihn wachsen
-  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 189).
+  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 194).
 
 ## Vertiefung: erst lesen, wenn das Thema dran ist
 

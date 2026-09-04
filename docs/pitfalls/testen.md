@@ -38,6 +38,14 @@ Muss **genau einen** Namen ausgeben. Heilmittel ist ein erneutes `build.sh`.
 * **Der eingebettete Browser-Pane blockiert Service-Worker-Registrierung** und lässt
   Klicks in 30s-Timeouts laufen. Das ist kein App-Bug. Für echte Verifikation den
   Playwright-MCP nehmen.
+* **Screenshot einer lokalen HTML-Vorschau im Browser-Pane.** Symptom: `This tab shows a
+  local file, not a web page; page tools can't act on it here` — der Tab ist offen, aber
+  kein Screenshot kommt durch. Was funktioniert hat: die Datei in den Projektordner legen
+  *und* mit `navigate` statt `preview_start` öffnen; der Pane rendert sie dann als
+  Snapshot-Tab. Welcher der beiden Punkte den Unterschied macht, ist nicht nachgeprüft —
+  beides zusammen wurde geändert. Nicht auf den Zusatz „files outside the project folder
+  render as static snapshots" schauen, der erscheint auch bei Dateien *im* Projektordner.
+  `zoom` mit `region` kann der Pane nicht, er liefert still den ganzen Screenshot.
 * **Der Playwright-MCP lädt nur Dateien aus dem Projektordner hoch.** Symptom:
   `File access denied: … is outside allowed roots`. Testbilder also im Repo ablegen (und
   hinterher wegräumen), nicht im Temp-Ordner.

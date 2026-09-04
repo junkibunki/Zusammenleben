@@ -1,4 +1,5 @@
 import { pb } from './pocketbase.svelte.js';
+import { maybeFly } from './easteregg.svelte.js';
 
 // Genau ein Record, angelegt von Migration 1756000020 -- die ID darf der Client
 // deshalb kennen.
@@ -85,6 +86,10 @@ export async function parkGundula(lat, lng) {
 	);
 
 	gundula.record = record;
+
+	// Osterei: nur beim Parkenden wuerfeln, nicht bei allen Zuschauern.
+	maybeFly();
+
 	return record;
 }
 
