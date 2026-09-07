@@ -57,6 +57,13 @@ Bedienelement für Screenreader, zwei Trefferflächen für den Daumen.
 `onclick={() => input?.click()}` am shadcn-`Button`: die Tastatur bedient den Button, das
 Feld bleibt aus der Tab-Reihenfolge.
 
+**Ein Single-Select von bits-ui lässt sich abwählen.** Tippt man den bereits gewählten
+Eintrag noch einmal an, setzt `Select.Root` den gebundenen Wert auf `""` — nicht auf den
+bisherigen und auch nicht auf einen Default. Symptom wäre ein leerer Trigger und eine
+Weiterverarbeitung, die auf einen der Listenwerte gebaut hat. Wer den Wert später vergleicht
+oder darauf verzweigt, muss ihn selbst normalisieren (`category || DEFAULT_CATEGORY`) — und
+zwar an *einer* Stelle, sonst arbeiten zwei Aufrufe mit verschiedenen Kategorien.
+
 **Tap-Targets kommen nicht von allein, auch nicht mit `size="lg"`.** shadcn ist für die
 Maus gebaut: `default` = `h-9` (36px), `lg` = `h-10` (**40px**), `icon` = `size-9`,
 `sm` = `h-8`. Für die 44px dieser App muss die Höhe explizit dazu: `class="h-11"` bzw.

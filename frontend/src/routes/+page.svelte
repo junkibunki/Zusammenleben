@@ -21,6 +21,7 @@
 		CATEGORIES,
 		DEFAULT_CATEGORY
 	} from '$lib/items.svelte.js';
+	import { isCollapsed, toggleCategory, expandCategory } from '$lib/collapse.svelte.js';
 
 	// "Anna · heute 19:41 · gekauft von Papa" -- leere Teile fallen raus.
 	function metaFor(item) {
@@ -61,8 +62,14 @@
 		const name = draft;
 		if (!name.trim()) return;
 		draft = '';
+		// Einmal normalisieren: das Select laesst sich abwaehlen (leerer Wert), und
+		// addItem() wuerde daraus die Standardkategorie machen -- aufgeklappt werden
+		// muss genau die, unter der der Eintrag dann steht.
+		const target = category || DEFAULT_CATEGORY;
 		try {
-			await addItem(name, category);
+			await addItem(name, target);
+			// Sonst landet der neue Eintrag unsichtbar in einer zugeklappten Gruppe.
+			expandCategory(target);
 		} catch (err) {
 			draft = name;
 			store.error = err?.message ?? 'Hinzufügen fehlgeschlagen';
@@ -163,15 +170,33 @@
 	{/snippet}
 
 	{#each groups as group (group.category)}
+		{@const collapsed = isCollapsed(group.category)}
 		<section class="mb-4">
-			<h2 class="text-muted-foreground mb-1.5 px-1 text-xs font-medium tracking-wide uppercase">
-				{group.category}
+			<!-- Ueberschrift und Schalter in einem: die Zeile bleibt fuer Screenreader
+			     eine Gliederungsebene, fuer den Daumen eine 44px hohe Flaeche. -->
+			<h2>
+				<button
+					type="button"
+					class="text-muted-foreground focus-visible:ring-ring/50 flex h-11 w-full items-center gap-1.5 rounded-md px-1 text-left text-xs font-medium tracking-wide uppercase outline-none focus-visible:ring-[3px]"
+					aria-expanded={!collapsed}
+					onclick={() => toggleCategory(group.category)}
+				>
+					{#if collapsed}
+						<ChevronRightIcon class="size-4 shrink-0" />
+					{:else}
+						<ChevronDownIcon class="size-4 shrink-0" />
+					{/if}
+					<span class="truncate">{group.category}</span>
+					<span class="shrink-0 normal-case">({group.items.length})</span>
+				</button>
 			</h2>
-			<div class="bg-card divide-y overflow-hidden rounded-lg border">
-				{#each group.items as item (item.id)}
-					{@render row(item)}
-				{/each}
-			</div>
+			{#if !collapsed}
+				<div class="bg-card divide-y overflow-hidden rounded-lg border">
+					{#each group.items as item (item.id)}
+						{@render row(item)}
+					{/each}
+				</div>
+			{/if}
 		</section>
 	{/each}
 
