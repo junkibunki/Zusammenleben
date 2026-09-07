@@ -96,6 +96,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
 │       │   ├── gundula.svelte.js     # $state des Parkplatzes + Realtime
+│       │   ├── ideas.svelte.js       # $state des Ideen-Feeds + Realtime
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
@@ -105,7 +106,9 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
 │                                  # Rahmen mit Nav), +page.svelte (Liste),
 │                                  # items/[id]/ (Titel + Beschreibung eines
-│                                  # Eintrags), profile/, residents/, login/
+│                                  # Eintrags), ideen/ (Feed der
+│                                  # Erweiterungsvorschlaege), profile/,
+│                                  # residents/, login/
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ noetig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
@@ -180,6 +183,12 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   `cd frontend && …` voranstellen.
 * Lange Markdown-Dateien über das `Write`-Tool schreiben; als Bash-Heredoc brechen sie am
   Quoting.
+* **`npx prettier --write` schreibt hier den falschen Stil.** Symptom: eine gerade
+  angelegte Datei kommt mit doppelten Anführungszeichen und Zwei-Leerzeichen-Einrückung
+  zurück, während der Rest des Projekts Tabs und einfache Anführungszeichen nutzt. Es
+  gibt **keine** Prettier-Konfiguration im Repo (und kein `format`-Skript) — `npx` greift
+  auf die Defaults zurück und `.svelte` kann es ohne Plugin gar nicht parsen. Also nicht
+  formatieren lassen, sondern im Stil der Nachbardatei schreiben.
 * **Auf dieser Maschine gibt es kein `python`.** Symptom: „Python wurde nicht gefunden;
   ohne Argumente ausführen, um aus dem Microsoft Store zu installieren" — der `python`
   im PATH ist nur der Store-Stub aus `WindowsApps`. Für kleine Skripte `node -` mit

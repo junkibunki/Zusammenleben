@@ -3,6 +3,7 @@
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import ShoppingCartIcon from '@lucide/svelte/icons/shopping-cart';
 	import CarIcon from '@lucide/svelte/icons/car';
+	import LightbulbIcon from '@lucide/svelte/icons/lightbulb';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
@@ -18,6 +19,12 @@
 	const LINKS = [
 		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', icon: ShoppingCartIcon },
 		{ href: '/gundula', label: 'Wo ist Gundula', title: 'Wo ist Gundula', icon: CarIcon },
+		{
+			href: '/ideen',
+			label: 'Neue Ideen für den grünen Freund',
+			title: 'Ideen für den grünen Freund',
+			icon: LightbulbIcon
+		},
 		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
 		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
 	];
@@ -79,7 +86,7 @@
 							href={link.href}
 							variant={active ? 'secondary' : 'ghost'}
 							size="lg"
-							class="h-11 justify-start"
+							class="h-auto min-h-11 justify-start py-2 text-left leading-tight whitespace-normal"
 							aria-current={active ? 'page' : undefined}
 						>
 							<link.icon class="size-4" />
