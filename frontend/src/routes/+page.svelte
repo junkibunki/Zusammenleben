@@ -1,6 +1,7 @@
 <script>
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { auth } from '$lib/pocketbase.svelte.js';
@@ -135,6 +136,13 @@
 				onCheckedChange={() => toggleItem(item)}
 				aria-label={item.name}
 			/>
+			<!-- Der Zeilentext unten liegt in einem aria-hidden-Bereich, ist also
+			     nur fuer das Auge da. Ohne diese Kopie waere die Beschreibung per
+			     Screenreader aus der Liste heraus gar nicht zu erreichen. Sie muss
+			     ausserhalb des Buttons stehen -- aria-hidden erbt nach unten. -->
+			{#if item.note}
+				<span class="sr-only">Beschreibung: {item.note}</span>
+			{/if}
 			<!-- Die ganze Zeile soll antippbar bleiben; die Checkbox traegt den
 			     zugaenglichen Namen, dieser Bereich ist nur der Trefferbereich.
 			     Das senkrechte Padding sitzt hier drin, damit es mitzaehlt. -->
@@ -151,12 +159,25 @@
 						>{/if}
 				</span>
 				{#if item.note}
-					<span class="text-muted-foreground block truncate text-sm">{item.note}</span>
+					<!-- line-clamp-2 setzt display:-webkit-box, deshalb kein "block";
+					     whitespace-pre-line laesst eigene Zeilenumbrueche zaehlen. -->
+					<span class="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line"
+						>{item.note}</span
+					>
 				{/if}
 				{#if meta}
 					<span class="text-muted-foreground block truncate text-xs">{meta}</span>
 				{/if}
 			</button>
+			<Button
+				variant="ghost"
+				size="icon"
+				class="text-muted-foreground size-11 shrink-0"
+				aria-label="{item.name} bearbeiten"
+				href="/items/{item.id}"
+			>
+				<PencilIcon class="size-4" />
+			</Button>
 			<Button
 				variant="ghost"
 				size="icon"

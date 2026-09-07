@@ -30,8 +30,12 @@
 		open = false;
 	});
 
+	// Die Detailseite steht nicht im Menue, braucht oben aber trotzdem ihren
+	// eigenen Titel -- sonst hiesse sie wie die Liste, von der sie kommt.
 	const title = $derived(
-		LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste'
+		page.url.pathname.startsWith('/items/')
+			? 'Eintrag'
+			: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
 	);
 	const photo = $derived(avatarUrl(auth.user));
 	const label = $derived(auth.user?.name || auth.user?.email?.split('@')[0] || '');

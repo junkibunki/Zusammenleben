@@ -187,3 +187,32 @@ export async function clearDone() {
 		await deleteItem(item);
 	}
 }
+
+/** Maximale Laenge von `note` -- muss mit Migration 1756000006 uebereinstimmen. */
+export const NOTE_MAX = 2000;
+
+/**
+ * Ein einzelnes Item vom Server holen. Die Detailseite kann nicht aus `store`
+ * lesen: wird sie direkt geladen (Reload, Lesezeichen), lief syncItems() nie.
+ */
+export function loadItem(id) {
+	return pb.collection('items').getOne(id, { expand: EXPAND });
+}
+
+/**
+ * Titel und Beschreibung speichern. Aktualisiert den Store gleich mit, damit
+ * die Liste beim Zurueckgehen nicht erst auf das Realtime-Event warten muss --
+ * beim Verlassen der Listenseite ist die Subscription abgemeldet.
+ */
+export async function saveItemDetails(id, { name, note }) {
+	const record = await pb.collection('items').update(
+		id,
+		{ name: name.trim(), note: note.trim() },
+		{ expand: EXPAND }
+	);
+
+	const idx = store.items.findIndex((i) => i.id === id);
+	if (idx > -1) store.items[idx] = record;
+
+	return record;
+}

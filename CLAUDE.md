@@ -104,7 +104,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)
 │       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
 │                                  # Rahmen mit Nav), +page.svelte (Liste),
-│                                  # profile/, residents/, login/
+│                                  # items/[id]/ (Titel + Beschreibung eines
+│                                  # Eintrags), profile/, residents/, login/
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ noetig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
