@@ -24,6 +24,12 @@ Muss **genau einen** Namen ausgeben. Heilmittel ist ein erneutes `build.sh`.
   weil die Seite nur eine Fehlerseite ist. PocketBase für Tests über das
   `run_in_background` des Bash-Tools starten und mit `/api/health` prüfen, *bevor* man
   einem Browserergebnis glaubt.
+* **Eine Pipe hinter dem Serverstart verschluckt jede Zeile.** Symptom: die Task-Datei von
+  `run_in_background` bleibt 0 Byte, obwohl `/api/health` antwortet — der Server läuft
+  also, „produziert aber keine Ausgabe". Ursache ist das `| tail -40`: `tail` kann
+  naturgemäß erst schreiben, wenn der Server sich beendet hat, und `grep`/`head` puffern
+  blockweise, liefern also auch erst nach einigen KB. Den Serverstart deshalb nie durch
+  eine Pipe schicken; zum Mitlesen `> datei 2>&1` und hinterher darin suchen.
 * **Umlaute in Bash-`curl`-Payloads werden auf Windows zerlegt**, PocketBase antwortet mit
   einem nichtssagenden `400`. Für Requests mit Umlauten (z.B. `category:"Obst/Gemüse"`)
   `node -e "fetch(…)"` benutzen, Token per Env-Variable übergeben.

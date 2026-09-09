@@ -53,6 +53,13 @@ Liste: Checkbox trägt den zugänglichen Namen (`aria-label={item.name}`), der a
 Rest der Zeile ist ein eigener Button mit `tabindex="-1"` und `aria-hidden` — ein
 Bedienelement für Screenreader, zwei Trefferflächen für den Daumen.
 
+**`AlertDialog.Action` schließt den Dialog nicht mehr, sobald ein eigenes `onclick` daran
+hängt.** Symptom: die Aktion läuft (es ist gespeichert), der Dialog bleibt aber mit
+`data-state="open"` stehen. Das eigene `onclick` ersetzt das mitgelieferte, das sonst
+zumacht. Also im Handler selbst `open = false` setzen — und zwar *vor* dem `await`, sonst
+steht der Dialog noch, während der Request läuft. Betrifft jeden Dialog mit eigener
+Aktion: `gundula/`, `ideen/` und `ausgaben/` machen es alle so.
+
 **Für einen Datei-Dialog reicht ein Button.** `<input type="file" class="hidden">` plus
 `onclick={() => input?.click()}` am shadcn-`Button`: die Tastatur bedient den Button, das
 Feld bleibt aus der Tab-Reihenfolge.

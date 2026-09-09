@@ -4,6 +4,7 @@
 	import ShoppingCartIcon from '@lucide/svelte/icons/shopping-cart';
 	import CarIcon from '@lucide/svelte/icons/car';
 	import LightbulbIcon from '@lucide/svelte/icons/lightbulb';
+	import EuroIcon from '@lucide/svelte/icons/euro';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
@@ -18,6 +19,7 @@
 	// nach ihrem Inhalt, oben aber weiter nach der App.
 	const LINKS = [
 		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', icon: ShoppingCartIcon },
+		{ href: '/ausgaben', label: 'Ich habe bezahlt', title: 'Ausgaben', icon: EuroIcon },
 		{ href: '/gundula', label: 'Wo ist Gundula', title: 'Wo ist Gundula', icon: CarIcon },
 		{
 			href: '/ideen',

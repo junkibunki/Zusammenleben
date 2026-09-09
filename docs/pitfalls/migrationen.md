@@ -49,6 +49,21 @@ lief. Zum Prüfen einen temporären Hook in `pb_hooks/` legen, der in `onBootstr
 `$app.db().newQuery(…).all(arr, new DynamicModel(…))` still nichts;
 `$app.findAllRecords('items')` funktioniert.
 
+**Ein Prüf-Hook in `onBootstrap` sieht eine *neue* Collection nicht.** Symptom:
+`GoError: sql: no rows in result set` aus `findCollectionByNameOrId('…')`, obwohl die
+Migration in derselben Sitzung lief — `onBootstrap` (auch nach `e.next()`) ist früher als
+die Migrationen. Beim Nachsehen, ob eine Collection *angelegt* wurde, also nicht in
+`onBootstrap` lesen, sondern eine temporäre Route registrieren
+(`routerAdd('GET', '/zz-tmp-check', (e) => e.json(200, …))`) und sie per `fetch` abrufen;
+dort liegt der fertige Stand. Zwei Dinge dabei:
+
+**Eine neu angelegte Hook-Datei wird nicht eingelesen**, `touch` genügt auch nicht — der
+Server muss neu starten. Erst die Datei schreiben, *dann* `serve`.
+
+**Eine Migration erneut anwenden** heißt: mit `migrate down 1` zurücknehmen und beim
+nächsten Start wieder hochlaufen lassen. `down` fragt interaktiv nach und braucht deshalb
+ein `echo "y" |` davor, sonst bricht es mit „The command has been cancelled" ab.
+
 ## API-Rules
 
 `expand` kommt leer zurück, wenn die View-Rule der Zielcollection zumacht — Details in
