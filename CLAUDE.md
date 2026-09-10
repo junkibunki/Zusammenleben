@@ -60,7 +60,7 @@ kurze Datei als ein siebter Absatz in einer fremden.
 * Messwerte nur, wenn sie das Erkennen tragen (`?thumb=200x200` → 5,6 KB vs. 7,9 KB), nicht
   als Beleg dafür, dass gemessen wurde.
 * Wird ein Abschnitt beim Ergänzen länger als ~80 Zeilen, teile ihn auf, statt ihn wachsen
-  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 207 — der nächste
+  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 211 — der nächste
   Zuwachs geht nicht mehr hier hinein, sondern in eine Datei unter `docs/pitfalls/`).
 
 ## Vertiefung: erst lesen, wenn das Thema dran ist
@@ -73,6 +73,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 | [migrationen.md](docs/pitfalls/migrationen.md) | eine Migration in `pb/pb_migrations/` anlegst oder änderst |
 | [designsystem.md](docs/pitfalls/designsystem.md) | an UI-Komponenten, `app.css` oder Layout arbeitest |
 | [pwa-und-push.md](docs/pitfalls/pwa-und-push.md) | Service Worker, `push.svelte.js` oder `pb/pb_hooks/` anfasst |
+| [pocketbase-hooks.md](docs/pitfalls/pocketbase-hooks.md) | einen Request-Hook schreibst, der Felder setzt oder Fehler wirft |
 | [profil-upload.md](docs/pitfalls/profil-upload.md) | am Avatar oder einem anderen Dateifeld arbeitest |
 | [testen.md](docs/pitfalls/testen.md) | die App lokal startest oder im Browser verifizierst |
 | [deployment.md](docs/pitfalls/deployment.md) | `deploy.yml` änderst oder einem grünen Deploy glaubst |
@@ -99,6 +100,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── gundula.svelte.js     # $state des Parkplatzes + Realtime
 │       │   ├── ideas.svelte.js       # $state des Ideen-Feeds + Realtime
 │       │   ├── expenses.svelte.js    # $state der Ausgaben + Realtime, Cent-Aufteilung
+│       │   ├── wishes.svelte.js      # $state der Geschenkewuensche der *anderen*
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
@@ -111,12 +113,14 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # Eintrags), ideen/ (Feed der
 │                                  # Erweiterungsvorschlaege), ausgaben/ (teilen,
 │                                  # Salden, wer-schuldet-wem), profile/,
-│                                  # residents/, login/
+│                                  # wuensche/ (Wuensch dir was: eigene Wuensche
+│                                  # sind unsichtbar), residents/, login/
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ noetig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
 │   ├── pb_hooks/                  # push.pb.js (Hook-Anmeldungen), push-lib.js
-│   │                              # (Schluessel/Empfaenger/Versand), webpush.js GENERIERT
+│   │                              # (Schluessel/Empfaenger/Versand), wishes.pb.js
+│   │                              # (Doppelte-Pruefung), webpush.js GENERIERT
 │   ├── pb_data/                   # gitignored, die SQLite-DB
 │   └── pb_public/                 # gitignored, Build-Output
 ├── .github/workflows/deploy.yml   # Build + Deploy auf den VPS bei Push auf main
