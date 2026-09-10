@@ -15,10 +15,19 @@ const EXPAND = 'wisher';
 /** Maximale Laenge von `text` -- muss mit der Migration uebereinstimmen. */
 export const WISH_MAX = 200;
 
+/** Maximale Laenge von `note` (Migration 1789131600). */
+export const WISH_NOTE_MAX = 2000;
+
+// Nur die Zahl der eigenen Wuensche, kein Inhalt -- mehr gibt der Server dazu
+// nicht her (Route in pb_hooks/wishes.pb.js).
+const MY_COUNT_URL = '/api/wishes/mine/count';
+
 export const wishes = $state({
 	items: [],
 	loading: true,
-	error: null
+	error: null,
+	// Anzahl der *eigenen* Wuensche; null = noch unbekannt oder nicht abrufbar.
+	mine: null
 });
 
 // Bewusst *kein* $state: syncWishes() laeuft in einem $effect, und ein reaktiver
@@ -49,6 +58,20 @@ export function syncWishes() {
 			if (cancelled) return;
 			wishes.error = err?.message ?? 'Laden fehlgeschlagen';
 			wishes.loading = false;
+		});
+
+	// Die eigenen Wuensche kommen in keiner Liste vor, auch nicht ueber
+	// Realtime -- ihre Zahl muss deshalb aus der eigenen Route kommen. Beim
+	// Betreten der Seite ist sie ausserdem der einzige Moment, in dem ein
+	// Wunsch von einem anderen Geraet derselben Person auffaellt.
+	pb.send(MY_COUNT_URL, { method: 'GET' })
+		.then((res) => {
+			if (!cancelled) wishes.mine = Number(res?.count ?? 0);
+		})
+		.catch(() => {
+			// Fehlt die Zahl, fehlt nur sie: die Liste der anderen steht trotzdem.
+			// Kein wishes.error -- eine rote Meldung waere groesser als der Verlust.
+			if (!cancelled) wishes.mine = null;
 		});
 
 	// Das expand gehoert als drittes Argument dazu, sonst fehlt der Name genau
@@ -83,7 +106,7 @@ export function syncWishes() {
  * `wishes.items` noch beim naechsten Laden. Wirft bei einem Fehler weiter; die
  * Seite entscheidet, was sie anzeigt (und behaelt den Entwurf).
  */
-export async function addWish(text) {
+export async function addWish(text, note = '') {
 	const trimmed = text.trim();
 	if (!trimmed) return null;
 
@@ -96,7 +119,18 @@ export async function addWish(text) {
 	// und sie laeuft vor dem Hook, kann das Feld also nicht von ihm bekommen
 	// (docs/pitfalls/pocketbase-hooks.md). Luegen bringt nichts: genau diese
 	// Rule weist jeden anderen Wert ab.
-	return await pb.collection(COLLECTION).create({ text: trimmed, wisher: me });
+	const record = await pb.collection(COLLECTION).create({
+		text: trimmed,
+		note: note.trim(),
+		wisher: me
+	});
+
+	// Von hier an ist der Wunsch fuer den Wuenschenden weg -- die Zahl ist das
+	// Einzige, was von ihm bleibt. Hochzaehlen statt neu zu laden: der Create
+	// ist gerade durchgelaufen, die Zahl kann nur um eins hoeher sein.
+	if (typeof wishes.mine === 'number') wishes.mine += 1;
+
+	return record;
 }
 
 /**
@@ -121,6 +155,10 @@ export function wishErrorMessage(err) {
 
 	const clash = data.text_norm?.code ?? data.wisher?.code ?? '';
 	if (clash.includes('not_unique')) return 'Das steht schon auf deiner Liste.';
+
+	// Ueber das Formular nicht erreichbar (das Textarea begrenzt selbst), aber der
+	// einzige Grund, aus dem der Server `note` beanstanden kann.
+	if (data.note?.message) return 'Die Beschreibung ist zu lang.';
 
 	return null;
 }

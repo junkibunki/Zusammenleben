@@ -3,13 +3,23 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
 	import { userLabel, formatWhen } from '$lib/items.svelte.js';
-	import { wishes, syncWishes, addWish, wishErrorMessage, WISH_MAX } from '$lib/wishes.svelte.js';
+	import {
+		wishes,
+		syncWishes,
+		addWish,
+		wishErrorMessage,
+		WISH_MAX,
+		WISH_NOTE_MAX
+	} from '$lib/wishes.svelte.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 
 	let draft = $state('');
+	let noteDraft = $state('');
 	let posting = $state(false);
 
 	// Der Fehler am Eingabefeld (vor allem: schon gewuenscht). Getrennt von
@@ -57,8 +67,9 @@
 		formError = '';
 		posted = '';
 		try {
-			await addWish(text);
+			await addWish(text, noteDraft);
 			draft = '';
+			noteDraft = '';
 			posted = text.trim();
 		} catch (err) {
 			// Den Entwurf stehen lassen: bei einem Doppelten will die Person ihn
@@ -90,9 +101,33 @@
 			{posting ? 'Wünsche …' : 'Wünschen'}
 		</Button>
 	</div>
-	<p id="wunsch-hinweis" class="text-muted-foreground mt-2 text-xs">
-		Alle anderen sehen deinen Wunsch — du selbst nicht mehr.
-	</p>
+	<Textarea
+		bind:value={noteDraft}
+		maxlength={WISH_NOTE_MAX}
+		rows={2}
+		aria-label="Beschreibung (optional)"
+		placeholder="Beschreibung, Größe, Farbe, Link … (optional)"
+		class="mt-2 min-h-16"
+		oninput={() => {
+			formError = '';
+			posted = '';
+		}}
+	/>
+	<div id="wunsch-hinweis" class="text-muted-foreground mt-2 flex items-center gap-2 text-xs">
+		<p class="min-w-0 flex-1">Alle anderen sehen deinen Wunsch — du selbst nicht mehr.</p>
+		{#if wishes.mine !== null}
+			<!-- Die Zahl ist alles, was der Server ueber die eigene Liste herausgibt. -->
+			<Badge
+				variant="secondary"
+				class="font-normal"
+				title="Deine eigenen Wünsche bleiben dir verborgen — nur wie viele es sind, siehst du."
+			>
+				<GiftIcon />
+				{wishes.mine}
+				{wishes.mine === 1 ? 'Wunsch' : 'Wünsche'} von dir
+			</Badge>
+		{/if}
+	</div>
 </form>
 
 {#if formError}
@@ -185,6 +220,11 @@
 							{@const when = formatWhen(wish.created)}
 							<li class="px-3 py-2.5">
 								<p class="break-words">{wish.text}</p>
+								{#if wish.note}
+									<p class="text-muted-foreground mt-0.5 break-words whitespace-pre-line text-sm">
+										{wish.note}
+									</p>
+								{/if}
 								{#if when}
 									<span class="text-muted-foreground block text-xs">{when}</span>
 								{/if}
