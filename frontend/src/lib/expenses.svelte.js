@@ -10,9 +10,14 @@ const EXPAND = 'paid_by,shared_with,created_by';
 export const TITLE_MAX = 120;
 
 /**
- * Obergrenze fuer einen Betrag (10.000 €), ebenfalls in der Migration.
- * Nicht als Schutz vor Missbrauch gedacht, sondern gegen die verrutschte
- * Kommastelle: ein Tippfehler verschiebt sonst still alle Salden.
+ * Obergrenze fuer den *Betrag* eines Eintrags (10.000 €), ebenfalls in der
+ * Migration. Nicht als Schutz vor Missbrauch gedacht, sondern gegen die
+ * verrutschte Kommastelle: ein Tippfehler verschiebt sonst still alle Salden.
+ *
+ * Gilt in beide Richtungen: erlaubt ist -10.000 € … -0,01 € und
+ * 0,01 € … 10.000 €. Ein negativer Betrag ist eine Erstattung -- der Zahler
+ * hat Geld *bekommen* und gibt es an die Teilnehmer ab. Genau 0 ist keins von
+ * beidem und bleibt gesperrt (Migration 1789218000).
  */
 export const AMOUNT_MAX_CENTS = 1000000;
 
@@ -149,8 +154,11 @@ function matches(record, { title, amountCents, paidBy, members }) {
 export async function addExpense({ id, title, amountCents, paidBy, sharedWith }) {
 	const trimmed = (title ?? '').trim();
 	if (!trimmed) throw userError('Die Bezeichnung fehlt.');
-	if (!Number.isInteger(amountCents) || amountCents < 1) throw userError('Der Betrag fehlt.');
-	if (amountCents > AMOUNT_MAX_CENTS) throw userError('Der Betrag ist zu groß.');
+	// 0 ist hier kein fehlender Betrag, sondern ein sinnloser -- er verschiebt
+	// keinen Saldo. Die Meldung trennt das nicht, weil das Feld dafuer keinen
+	// Unterschied macht: beides heisst "trag eine Zahl ein".
+	if (!Number.isInteger(amountCents) || amountCents === 0) throw userError('Der Betrag fehlt.');
+	if (Math.abs(amountCents) > AMOUNT_MAX_CENTS) throw userError('Der Betrag ist zu groß.');
 	if (!paidBy) throw userError('Es fehlt, wer bezahlt hat.');
 
 	const members = [...new Set((sharedWith ?? []).filter(Boolean))];
@@ -250,15 +258,21 @@ export async function deleteExpense(expense) {
  *
  * Gleicher `seed` heisst gleiches Ergebnis, auf jedem Geraet.
  *
+ * Ein negativer Betrag (Erstattung) ergibt negative Anteile. Gerechnet wird
+ * dafuer mit dem Betrag ohne Vorzeichen und erst am Ende negiert -- `Math.floor`
+ * rundet sonst nach *unten* statt zum Nullpunkt, und der "Rest" waere negativ.
+ *
  * @returns {Map<string, number>} User-ID -> Anteil in Cent
  */
 export function splitShares(amountCents, memberIds, seed = '') {
 	const shares = new Map();
 	const ids = [...new Set((memberIds ?? []).filter(Boolean))];
-	if (!ids.length || !Number.isFinite(amountCents) || amountCents <= 0) return shares;
+	if (!ids.length || !Number.isFinite(amountCents) || amountCents === 0) return shares;
 
-	const base = Math.floor(amountCents / ids.length);
-	const rest = amountCents - base * ids.length;
+	const sign = amountCents < 0 ? -1 : 1;
+	const total = Math.abs(amountCents);
+	const base = Math.floor(total / ids.length);
+	const rest = total - base * ids.length;
 	for (const id of ids) shares.set(id, base);
 
 	const order = [...ids].sort();
@@ -269,6 +283,7 @@ export function splitShares(amountCents, memberIds, seed = '') {
 		shares.set(id, shares.get(id) + 1);
 	}
 
+	if (sign === -1) for (const [id, cents] of shares) shares.set(id, -cents);
 	return shares;
 }
 
@@ -305,10 +320,18 @@ export function computeSettlement(items) {
 	for (const e of items ?? []) {
 		if (!countsIn(e)) continue;
 		for (const [id, cents] of splitShares(e.amount_cents, e.shared_with, e.id)) {
-			if (id === e.paid_by || cents <= 0) continue;
-			const row = owed.get(id) ?? new Map();
-			row.set(e.paid_by, (row.get(e.paid_by) ?? 0) + cents);
-			owed.set(id, row);
+			if (id === e.paid_by || cents === 0) continue;
+
+			// Bei einer Erstattung (negativer Anteil) dreht sich die Richtung um:
+			// der Zahler hat das Geld bekommen und schuldet es den Teilnehmern.
+			// Ein `cents < 0` einfach zu ueberspringen hiesse, die Erstattung
+			// stillschweigend zu verschlucken.
+			const debtor = cents > 0 ? id : e.paid_by;
+			const creditor = cents > 0 ? e.paid_by : id;
+
+			const row = owed.get(debtor) ?? new Map();
+			row.set(creditor, (row.get(creditor) ?? 0) + Math.abs(cents));
+			owed.set(debtor, row);
 		}
 	}
 
@@ -348,15 +371,22 @@ export function formatEuro(cents) {
 
 /**
  * Eingabe im Betragsfeld -> Cent, oder `null` wenn das keine brauchbare Zahl
- * ist (auch bei mehr als `AMOUNT_MAX_CENTS`).
+ * ist (auch bei mehr als `AMOUNT_MAX_CENTS` und bei genau 0).
+ *
  * Nimmt Komma *und* Punkt: das Feld ist `inputmode="decimal"`, und welches
  * Zeichen die Tastatur dort anbietet, entscheidet das Geraet, nicht die App.
+ * Aus demselben Grund gilt neben dem Bindestrich auch das typografische Minus
+ * und der Gedankenstrich als Vorzeichen -- iOS ersetzt beim Tippen gern.
  */
 export function parseAmount(text) {
-	const cleaned = (text ?? '').replace(/[\s€]/g, '').replace(',', '.');
-	if (!/^\d{1,9}(\.\d{1,2})?$/.test(cleaned)) return null;
+	const cleaned = (text ?? '')
+		.replace(/[\s€]/g, '')
+		.replace(/[−–—]/g, '-')
+		.replace(',', '.');
+	if (!/^-?\d{1,9}(\.\d{1,2})?$/.test(cleaned)) return null;
 
 	// Ueber die Cent-Zahl runden: parseFloat('0.29') * 100 ist 28.999999999999996.
 	const cents = Math.round(Number(cleaned) * 100);
-	return cents >= 1 && cents <= AMOUNT_MAX_CENTS ? cents : null;
+	// `cents !== 0` faengt auch "-0,00" ab: -0 === 0 ist in JS wahr.
+	return cents !== 0 && Math.abs(cents) <= AMOUNT_MAX_CENTS ? cents : null;
 }

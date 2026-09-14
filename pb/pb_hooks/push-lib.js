@@ -245,4 +245,72 @@ function notifyNewItem(app, record, actorId) {
 	});
 }
 
-module.exports = { vapid, publicKey, broadcast, sendTest, notifyNewItem };
+/**
+ * Cent -> "1.234,56 €". Von Hand, weil `Intl` in der JS-VM von PocketBase nicht
+ * verlaesslich vorhanden ist -- `toLocaleString('de-DE', …)` liefert dort im
+ * Zweifel die englische Form, und "1,234.56" in einer deutschen Meldung liest
+ * sich wie ein anderer Betrag.
+ *
+ * Das Vorzeichen faellt bewusst weg: der Text davor sagt schon, in welche
+ * Richtung das Geld geflossen ist, und ein Minus dahinter waere doppelt.
+ */
+function euro(cents) {
+	const abs = Math.abs(Math.round(Number(cents) || 0));
+	const whole = String(Math.floor(abs / 100));
+	const rest = String(abs % 100);
+
+	let grouped = '';
+	for (let i = 0; i < whole.length; i++) {
+		if (i > 0 && (whole.length - i) % 3 === 0) grouped += '.';
+		grouped += whole.charAt(i);
+	}
+	return `${grouped},${rest.length < 2 ? `0${rest}` : rest} €`;
+}
+
+/**
+ * Eine neue Ausgabe oder Erstattung -- alle ausser dem Eintragenden bekommen
+ * sie. Bewusst *alle* und nicht nur die Beteiligten: wer nicht mitzahlt, sieht
+ * die Zeile trotzdem in der Liste, und eine Benachrichtigung, die mal kommt und
+ * mal nicht, ist schwerer zu deuten als eine, die immer kommt.
+ *
+ * `actorId` ist der angemeldete Nutzer aus dem Request, nicht `created_by`:
+ * dem Feld kann ein Client jede ID mitgeben, und dann bekaeme der Anlegende die
+ * eigene Meldung und ein anderer keine. Dieselbe Trennung wie in
+ * `notifyNewItem`.
+ *
+ * Ein negativer Betrag ist eine Erstattung: `paid_by` hat das Geld dann nicht
+ * ausgelegt, sondern bekommen.
+ */
+function notifyNewExpense(app, record, actorId) {
+	const author = actorId || record.getString('created_by');
+
+	const subscriptions = app.findRecordsByFilter(
+		'push_subscriptions',
+		'user != {:uid}',
+		'-created',
+		200,
+		0,
+		{ uid: author }
+	);
+
+	const cents = record.getInt('amount_cents');
+	const refund = cents < 0;
+	const who = userLabel(app, record.getString('paid_by'));
+	const members = record.get('shared_with') || [];
+	const count = members.length || 0;
+
+	const details = [record.getString('title')];
+	if (who) details.push(`${refund ? 'erhalten von' : 'bezahlt von'} ${who}`);
+	if (count > 0) details.push(count === 1 ? 'auf 1 Person' : `auf ${count} Personen`);
+
+	return broadcast(app, subscriptions, {
+		title: `${refund ? 'Erstattung' : 'Neue Ausgabe'}: ${euro(cents)}`,
+		body: details.join(' · '),
+		// Ein Tag pro Eintrag: zwei Ausgaben ergeben zwei Meldungen, derselbe
+		// Eintrag (Wiederholung durch den Push-Dienst) nur eine.
+		tag: `einkauf-expense-${record.id}`,
+		url: '/ausgaben'
+	});
+}
+
+module.exports = { vapid, publicKey, broadcast, sendTest, notifyNewItem, notifyNewExpense };

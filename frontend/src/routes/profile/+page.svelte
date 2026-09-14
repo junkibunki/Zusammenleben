@@ -260,8 +260,8 @@
 		<Card.Header>
 			<Card.Title>Benachrichtigungen</Card.Title>
 			<Card.Description>
-				Schreibt jemand etwas auf den Zettel, meldet sich dieses Gerät — auch wenn die App
-				geschlossen ist.
+				Schreibt jemand etwas auf den Zettel oder trägt eine Ausgabe ein, meldet sich dieses
+				Gerät — auch wenn die App geschlossen ist.
 			</Card.Description>
 		</Card.Header>
 

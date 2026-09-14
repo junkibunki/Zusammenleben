@@ -59,3 +59,17 @@ onRecordCreateRequest((e) => {
 		e.app.logger().error('Push zu neuem Eintrag fehlgeschlagen', 'fehler', String(err));
 	}
 }, 'items');
+
+// Dasselbe fuer Geld: eine neue Ausgabe oder Erstattung verschiebt die Salden
+// aller Beteiligten, und wer es nicht mitbekommt, traegt dieselbe Rechnung ein
+// zweites Mal. Wieder der Request-Hook -- nur hier steht in `e.auth`, wer den
+// Eintrag angelegt hat; `created_by` kommt aus dem Request und waere frei
+// waehlbar.
+onRecordCreateRequest((e) => {
+	e.next();
+	try {
+		require(`${__hooks}/push-lib.js`).notifyNewExpense(e.app, e.record, e.auth?.id);
+	} catch (err) {
+		e.app.logger().error('Push zu neuer Ausgabe fehlgeschlagen', 'fehler', String(err));
+	}
+}, 'expenses');

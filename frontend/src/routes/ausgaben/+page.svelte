@@ -129,6 +129,40 @@
 	// designsystem.md) -- der Wert wird deshalb an *einer* Stelle normalisiert.
 	const paidBy = $derived(payer || auth.user?.id || '');
 	const amountCents = $derived(parseAmount(amount));
+
+	// Ausgabe oder Erstattung -- das Vorzeichen steht nur an *einer* Stelle: im
+	// Text des Betragsfeldes. Der Umschalter schreibt es dorthin und liest es von
+	// dort zurueck; ein eigener Zustand daneben koennte dem Feld widersprechen,
+	// und bei Geld ist genau das die unangenehmste Sorte falsch.
+	//
+	// Gelesen wird der rohe Text, nicht `amountCents`: bei leerem oder halb
+	// getipptem Feld gibt es noch keine Zahl, die Auswahl soll aber schon stehen.
+	//
+	// Gelesen wird er dabei genau so, wie `parseAmount` ihn sieht -- also ohne
+	// Leerraum und Euro-Zeichen. Sonst steht bei einer Eingabe wie "€-5" auf dem
+	// Knopf "Ausgabe", waehrend eine Erstattung gespeichert wird.
+	const bare = $derived(amount.replace(/[\s€]/g, ''));
+
+	/** Die vier Striche, die `parseAmount` als Vorzeichen durchgehen laesst. */
+	const SIGN = /^[-−–—]/;
+
+	const negative = $derived(SIGN.test(bare));
+
+	/** Steht im Feld ausser dem Vorzeichen ueberhaupt etwas? */
+	const amountTyped = $derived(bare.replace(SIGN, '') !== '');
+
+	function setSign(neg) {
+		const body = bare.replace(SIGN, '');
+		amount = neg ? `-${body}` : body;
+	}
+
+	/** Die erlaubte Spanne als Text -- bei einer Erstattung liegt sie im Minus. */
+	const amountRange = $derived(
+		negative
+			? `${formatEuro(-AMOUNT_MAX_CENTS)} und ${formatEuro(-1)}`
+			: `${formatEuro(1)} und ${formatEuro(AMOUNT_MAX_CENTS)}`
+	);
+
 	const valid = $derived(
 		title.trim().length > 0 &&
 			amountCents !== null &&
@@ -221,7 +255,10 @@
 	function metaFor(expense) {
 		const parts = [];
 		const who = nameOf(expense.paid_by);
-		if (who) parts.push(`bezahlt von ${who}`);
+		// Bei einer Erstattung ist dieselbe Person nicht der Zahler, sondern der
+		// Empfaenger -- "bezahlt von" waere hier die Richtung, in die das Geld
+		// gerade *nicht* geflossen ist.
+		if (who) parts.push(`${expense.amount_cents < 0 ? 'erhalten von' : 'bezahlt von'} ${who}`);
 
 		const by = expense.created_by;
 		if (by && by !== expense.paid_by) parts.push(`eingetragen von ${nameOf(by)}`);
@@ -271,7 +308,8 @@
 		</p>
 	{:else if onlyPayer}
 		<p class="text-muted-foreground px-1 text-xs">
-			Nur der Zahler ausgewählt — der Eintrag verschiebt keinen Saldo.
+			Nur {negative ? 'der Empfänger' : 'der Zahler'} ausgewählt — der Eintrag verschiebt keinen
+			Saldo.
 		</p>
 	{/if}
 {/snippet}
@@ -297,7 +335,7 @@
 	<Card.Root>
 		<form class="flex flex-col gap-(--card-spacing)" onsubmit={submit}>
 			<Card.Header>
-				<Card.Title>Neue Ausgabe</Card.Title>
+				<Card.Title>{negative ? 'Neue Erstattung' : 'Neue Ausgabe'}</Card.Title>
 			</Card.Header>
 
 			<!-- `gap-4` statt `gap-6`: die beiden Klappschalter darunter sind je 44px
@@ -318,6 +356,35 @@
 
 				<div class="grid gap-2">
 					<Label for="expense-amount">Betrag</Label>
+
+					<!-- Das Vorzeichen als Schalter statt als Taste: `inputmode="decimal"`
+					     bietet auf Android kein Minus an, und ein zweites Eingabefeld nur
+					     fuer die Richtung waere mehr Bedienung als diese zwei Knoepfe.
+					     Geschrieben wird es trotzdem ins Textfeld -- ein dort getipptes
+					     "-" schaltet hier also mit um, ohne dass es dafuer Code braucht. -->
+					<div class="grid grid-cols-2 gap-2" role="group" aria-label="Art des Eintrags">
+						<Button
+							type="button"
+							variant={negative ? 'outline' : 'default'}
+							size="lg"
+							class="h-11"
+							aria-pressed={!negative}
+							onclick={() => setSign(false)}
+						>
+							Ausgabe
+						</Button>
+						<Button
+							type="button"
+							variant={negative ? 'default' : 'outline'}
+							size="lg"
+							class="h-11"
+							aria-pressed={negative}
+							onclick={() => setSign(true)}
+						>
+							Erstattung
+						</Button>
+					</div>
+
 					<div class="flex items-center gap-2">
 						<Input
 							id="expense-amount"
@@ -332,8 +399,13 @@
 						<span class="text-muted-foreground shrink-0 text-sm">€</span>
 					</div>
 					<p id="expense-amount-hint" class="text-muted-foreground text-xs">
-						{#if amount.trim() !== '' && amountCents === null}
-							Bitte einen Betrag zwischen 0,01 und {formatEuro(AMOUNT_MAX_CENTS)} eintragen.
+						<!-- `amountTyped`, nicht `amount !== ''`: nach einem Tipp auf
+						     "Erstattung" steht im leeren Feld nur das Minus, und daraus
+						     eine Fehlermeldung zu machen waere eine Ruege fuers Umschalten. -->
+						{#if amountTyped && amountCents === null}
+							Bitte einen Betrag zwischen {amountRange} eintragen.
+						{:else if negative}
+							Erstattung: Das Geld ist zurückgekommen und wird auf die Ausgewählten verteilt.
 						{:else}
 							Komma oder Punkt, beides geht.
 						{/if}
@@ -350,7 +422,7 @@
 				<div class="flex flex-col">
 					<div>
 						{@render sectionToggle(
-							'Bezahlt von',
+							negative ? 'Bekommen von' : 'Bezahlt von',
 							nameOf(paidBy) || 'niemand',
 							payerOpen,
 							() => (payerOpen = !payerOpen)
@@ -364,9 +436,10 @@
 									<Select.Trigger
 										id="expense-payer"
 										class="h-11 w-full data-[size=default]:h-11"
-										aria-label="Bezahlt von"
+										aria-label={negative ? 'Bekommen von' : 'Bezahlt von'}
 									>
-										{nameOf(paidBy) || 'Wer hat bezahlt?'}
+										{nameOf(paidBy) ||
+											(negative ? 'Wer hat das Geld bekommen?' : 'Wer hat bezahlt?')}
 									</Select.Trigger>
 									<Select.Content>
 										{#each residents as user (user.id)}
@@ -376,7 +449,11 @@
 									</Select.Content>
 								</Select.Root>
 								<p class="text-muted-foreground px-1 text-xs">
-									Diese Person bekommt das Geld von den anderen zurück.
+									{#if negative}
+										Diese Person hat das Geld erhalten und gibt es an die anderen ab.
+									{:else}
+										Diese Person bekommt das Geld von den anderen zurück.
+									{/if}
 								</p>
 							</div>
 						{/if}
@@ -488,7 +565,13 @@
 
 			<Card.Footer>
 				<Button type="submit" size="lg" class="h-11 w-full" disabled={!valid || posting}>
-					{posting ? 'Trage ein …' : 'Ausgabe eintragen'}
+					{#if posting}
+						Trage ein …
+					{:else if negative}
+						Erstattung eintragen
+					{:else}
+						Ausgabe eintragen
+					{/if}
 				</Button>
 			</Card.Footer>
 		</form>
@@ -654,7 +737,9 @@
 <AlertDialog.Root bind:open={confirmOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>Ausgabe löschen?</AlertDialog.Title>
+			<AlertDialog.Title>
+				{pending && pending.amount_cents < 0 ? 'Erstattung löschen?' : 'Ausgabe löschen?'}
+			</AlertDialog.Title>
 			<AlertDialog.Description>
 				Verschiebt die Salden aller Beteiligten. Das lässt sich nicht zurücknehmen.
 			</AlertDialog.Description>

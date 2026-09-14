@@ -47,3 +47,10 @@ zeigt den Eintrag zwei Zeilen weiter oben. Also nicht nach dem Text filtern, son
 `?perPage=30&sort=-created` holen und in Node über `items` gehen. Und beim Suchen nach
 einem eigenen Hook-Log: die Server-Konsole (`> datei 2>&1`) zeigt nur `console.log`,
 `e.app.logger()` schreibt ausschließlich in `_logs`.
+
+## Der Log-Eintrag kommt verspätet
+
+Symptom: direkt nach dem Request steht in `/api/logs` nichts vom Hook — auch ohne Filter,
+auch bei `sort=-created`. PocketBase schreibt die Logs gesammelt, nicht sofort.
+Kein Beleg dafür, dass der Hook nicht gefeuert hat: ein paar Sekunden später noch einmal
+abfragen (nachgemessen: nach 1,5 s leer, beim nächsten Aufruf da).
