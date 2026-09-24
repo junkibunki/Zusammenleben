@@ -6,3 +6,6 @@ pb/pocketbase
 pb/pocketbase.exe
 pb/pb_data/
 pb/pb_public/
+
+# Snapshots und Logs des Playwright-MCP
+.playwright-mcp/
