@@ -5,7 +5,8 @@
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import { auth, avatarUrl, listUsers } from '$lib/pocketbase.svelte.js';
+	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
+	import { households, listMembers } from '$lib/households.svelte.js';
 	import { userLabel, formatWhen } from '$lib/items.svelte.js';
 	import {
 		expenses,
@@ -61,23 +62,28 @@
 
 	// Laden + Realtime-Subscription; Teardown beim Verlassen der Seite.
 	$effect(() => {
-		if (!auth.valid) return;
-		return syncExpenses();
+		const household = households.activeId;
+		if (!auth.valid || !household) return;
+		return syncExpenses(household);
 	});
 
-	// Die Bewohner kommen aus `users`, nicht aus den Ausgaben: geteilt wird auf
-	// alle, die es *jetzt* gibt. Der Effekt liest bewusst nichts von dem, was
-	// sein eigener Rueckweg schreibt (siehe CLAUDE.md).
+	// Die Bewohner kommen aus den Mitgliedschaften, nicht aus den Ausgaben:
+	// geteilt wird auf alle, die *jetzt* zum Haushalt gehoeren -- ein Gast, dessen
+	// Zeit abgelaufen ist, steht nur noch in den Ausgaben, an denen er beteiligt
+	// war. Der Effekt liest bewusst nichts von dem, was sein eigener Rueckweg
+	// schreibt (siehe CLAUDE.md).
 	$effect(() => {
 		attempt;
-		if (!auth.valid) return;
+		const household = households.activeId;
+		if (!auth.valid || !household) return;
 		let cancelled = false;
 		usersLoading = true;
 		usersFailed = false;
 
-		listUsers()
-			.then((records) => {
+		listMembers(household)
+			.then((all) => {
 				if (cancelled) return;
+				const records = all.filter((u) => u.membership.active);
 				users = records;
 				// Vorauswahl: alle. Nur beim Laden -- ein spaeteres Abwaehlen soll
 				// nicht wieder zurueckspringen.
@@ -100,7 +106,7 @@
 
 	/**
 	 * Namen und Fotos zu allen IDs, die auf der Seite vorkommen. Die
-	 * Bewohnerliste allein genuegt nicht: scheitert `listUsers()`, stehen die
+	 * Bewohnerliste allein genuegt nicht: scheitert `listMembers()`, stehen die
 	 * Namen nur noch in den expands der Ausgaben -- die Auswertung soll dann
 	 * trotzdem lesbar bleiben. Ein *geloeschter* Account hinterlaesst dagegen
 	 * auch kein expand mehr; fuer den greift der Fallback in `nameOf`.

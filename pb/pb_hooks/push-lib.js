@@ -183,6 +183,46 @@ function userLabel(app, id) {
 	}
 }
 
+/**
+ * Die Abos aller laufenden Mitglieder eines Haushalts, ausser `exceptId`.
+ *
+ * Laufend heisst: Haupt oder Gast mit leerem bzw. noch nicht erreichtem
+ * `until` -- dieselbe Bedingung wie in den API-Rules (Migration 1789304400).
+ * Wer die Zeile nicht sehen darf, soll auch nicht per Push davon erfahren.
+ */
+function householdSubscriptions(app, householdId, exceptId) {
+	if (!householdId) return [];
+
+	const memberships = app.findRecordsByFilter(
+		'memberships',
+		'household = {:h} && (until = "" || until > @now)',
+		'',
+		500,
+		0,
+		{ h: householdId }
+	);
+
+	let out = [];
+	for (let i = 0; i < memberships.length; i++) {
+		const uid = memberships[i].getString('user');
+		if (!uid || uid === exceptId) continue;
+		out = out.concat(
+			app.findRecordsByFilter('push_subscriptions', 'user = {:uid}', '-created', 50, 0, { uid })
+		);
+	}
+	return out;
+}
+
+/** Name des Haushalts fuer den Meldungstext; leer, wenn er nicht zu finden ist. */
+function householdLabel(app, id) {
+	if (!id) return '';
+	try {
+		return app.findRecordById('households', id).getString('name');
+	} catch {
+		return '';
+	}
+}
+
 /** Probebenachrichtigung an alle Geraete *einer* Person. */
 function sendTest(app, userId) {
 	const subscriptions = app.findRecordsByFilter(
@@ -205,7 +245,8 @@ function sendTest(app, userId) {
 }
 
 /**
- * Ein neuer Eintrag auf dem Zettel -- alle ausser dem Verfasser bekommen ihn.
+ * Ein neuer Eintrag auf dem Zettel -- alle im Haushalt ausser dem Verfasser
+ * bekommen ihn.
  *
  * `actorId` ist der *angemeldete* Nutzer aus dem Request, nicht das Feld
  * `added_by`: dem Feld kann ein Client jede beliebige ID mitgeben, und dann
@@ -214,17 +255,10 @@ function sendTest(app, userId) {
 function notifyNewItem(app, record, actorId) {
 	const author = actorId || record.getString('added_by');
 
-	// Wer den Eintrag geschrieben hat, weiss es schon. Ist niemand bekannt
-	// (z.B. serverseitig angelegt), trifft der Filter alle -- `user` ist
-	// required, steht also nie auf "".
-	const subscriptions = app.findRecordsByFilter(
-		'push_subscriptions',
-		'user != {:uid}',
-		'-created',
-		200,
-		0,
-		{ uid: author }
-	);
+	// Wer den Eintrag geschrieben hat, weiss es schon; die anderen nur, wenn
+	// sie im Haushalt des Eintrags sind.
+	const household = record.getString('household');
+	const subscriptions = householdSubscriptions(app, household, author);
 
 	const name = record.getString('name');
 	const quantity = record.getString('quantity');
@@ -234,6 +268,10 @@ function notifyNewItem(app, record, actorId) {
 	const details = [];
 	if (record.getString('category')) details.push(record.getString('category'));
 	if (from) details.push(`von ${from}`);
+	// Wer Gast in einem zweiten Haushalt ist, muss sehen, auf welchem Zettel
+	// das steht.
+	const where = householdLabel(app, household);
+	if (where) details.push(where);
 
 	return broadcast(app, subscriptions, {
 		title: `Neu: ${quantity ? `${name} · ${quantity}` : name}`,
@@ -269,7 +307,8 @@ function euro(cents) {
 
 /**
  * Eine neue Ausgabe oder Erstattung -- alle ausser dem Eintragenden bekommen
- * sie. Bewusst *alle* und nicht nur die Beteiligten: wer nicht mitzahlt, sieht
+ * sie, soweit sie im Haushalt der Ausgabe sind. Bewusst *alle* und nicht nur
+ * die Beteiligten: wer nicht mitzahlt, sieht
  * die Zeile trotzdem in der Liste, und eine Benachrichtigung, die mal kommt und
  * mal nicht, ist schwerer zu deuten als eine, die immer kommt.
  *
@@ -284,14 +323,8 @@ function euro(cents) {
 function notifyNewExpense(app, record, actorId) {
 	const author = actorId || record.getString('created_by');
 
-	const subscriptions = app.findRecordsByFilter(
-		'push_subscriptions',
-		'user != {:uid}',
-		'-created',
-		200,
-		0,
-		{ uid: author }
-	);
+	const household = record.getString('household');
+	const subscriptions = householdSubscriptions(app, household, author);
 
 	const cents = record.getInt('amount_cents');
 	const refund = cents < 0;
@@ -302,6 +335,8 @@ function notifyNewExpense(app, record, actorId) {
 	const details = [record.getString('title')];
 	if (who) details.push(`${refund ? 'erhalten von' : 'bezahlt von'} ${who}`);
 	if (count > 0) details.push(count === 1 ? 'auf 1 Person' : `auf ${count} Personen`);
+	const where = householdLabel(app, household);
+	if (where) details.push(where);
 
 	return broadcast(app, subscriptions, {
 		title: `${refund ? 'Erstattung' : 'Neue Ausgabe'}: ${euro(cents)}`,

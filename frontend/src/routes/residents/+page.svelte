@@ -1,7 +1,8 @@
 <script>
 	import XIcon from '@lucide/svelte/icons/x';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import { auth, avatarUrl, listUsers } from '$lib/pocketbase.svelte.js';
+	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
+	import { households, activeHousehold, listMembers } from '$lib/households.svelte.js';
 	import { userLabel, formatDate } from '$lib/items.svelte.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
@@ -19,19 +20,21 @@
 	// sonst startet er sich selbst neu, siehe CLAUDE.md.
 	$effect(() => {
 		attempt;
+		const household = households.activeId;
 		// Ohne gueltiges Token nicht laden. Die Anzeige bleibt auf "Lade ..." --
 		// der Guard im Layout leitet im selben Tick nach /login um, und "Keine
 		// Accounts gefunden" waere fuer diesen Moment eine falsche Aussage.
-		if (!auth.valid) return;
+		if (!auth.valid || !household) return;
 		let cancelled = false;
 		loading = true;
 		failed = false;
 		error = '';
 
-		listUsers()
+		listMembers(household)
 			.then((records) => {
 				if (cancelled) return;
-				users = records;
+				// Abgelaufene Gaeste wohnen hier nicht mehr.
+				users = records.filter((u) => u.membership.active);
 				loading = false;
 			})
 			.catch(() => {
@@ -48,9 +51,15 @@
 	// Nach Anzeigenamen sortieren, nicht nach `name`: ein Account ohne Namen heisst
 	// hier "Jemand" (die E-Mail liefert PocketBase in fremden Zeilen nicht mit) und
 	// soll sich damit einreihen, statt als leerer Name vorneweg zu stehen.
+	// Gaeste hinter die Bewohner.
 	const sorted = $derived(
-		[...users].sort((a, b) => userLabel(a).localeCompare(userLabel(b), 'de'))
+		[...users].sort(
+			(a, b) =>
+				(a.membership.role === 'gast') - (b.membership.role === 'gast') ||
+				userLabel(a).localeCompare(userLabel(b), 'de')
+		)
 	);
+	const household = $derived(activeHousehold());
 </script>
 
 {#if error}
@@ -86,8 +95,8 @@
 		<p class="text-muted-foreground py-12 text-center text-sm">Keine Accounts gefunden.</p>
 	{:else}
 		<p class="text-muted-foreground mb-1.5 px-1 text-xs font-medium tracking-wide uppercase">
-			{sorted.length}
-			{sorted.length === 1 ? 'Account' : 'Accounts'}
+			{household?.name ?? ''} · {sorted.length}
+			{sorted.length === 1 ? 'Person' : 'Personen'}
 		</p>
 		<ul class="bg-card divide-y overflow-hidden rounded-lg border">
 			{#each sorted as user (user.id)}
@@ -107,11 +116,20 @@
 							{#if me}
 								<Badge variant="secondary" class="shrink-0">du</Badge>
 							{/if}
+							{#if user.membership.role === 'gast'}
+								<Badge variant="outline" class="shrink-0">Gast</Badge>
+							{/if}
 						</div>
 						<!-- Bewusst fuer alle dasselbe: die E-Mail zeigt PocketBase nur beim
 						     eigenen Record, in fremden Zeilen stuende sonst nichts. -->
 						<span class="text-muted-foreground block truncate text-xs">
-							dabei seit {formatDate(user.created)}
+							{#if user.membership.role === 'gast'}
+								{user.membership.until
+									? `zu Gast bis ${formatDate(user.membership.until)}`
+									: 'zu Gast'}
+							{:else}
+								dabei seit {formatDate(user.created)}
+							{/if}
 						</span>
 					</div>
 				</li>

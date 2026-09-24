@@ -1,4 +1,5 @@
 import { pb } from './pocketbase.svelte.js';
+import { households } from './households.svelte.js';
 
 // Gemeinsame Ausgaben. Collection aus Migration 1788958800.
 const COLLECTION = 'expenses';
@@ -33,25 +34,30 @@ export const expenses = $state({
 // Bewusst *kein* $state: syncExpenses() laeuft in einem $effect, und ein
 // reaktiver Lesezugriff dort haengt den Effekt an das, was sein eigener
 // Ladevorgang anschliessend schreibt -- Endlosschleife (CLAUDE.md).
-let loadedOnce = false;
+// Haelt den Haushalt, dessen Ausgaben zuletzt geladen wurden.
+let loadedFor = '';
 
 /**
  * Laedt die Ausgaben (neuste zuerst) und haengt die Realtime-Subscription an.
  * Aufruf aus einem $effect heraus; der Rueckgabewert ist das Teardown.
  */
-export function syncExpenses() {
+export function syncExpenses(householdId) {
 	let cancelled = false;
 	// Nur beim ersten Laden "Lade …": beim Zurueckkehren steht die Liste noch da.
-	expenses.loading = !loadedOnce;
+	// Nach einem Wechsel des Haushalts gehoert sie nicht mehr hierher -- und
+	// zaehlte sonst bis zum Laden in fremden Salden mit.
+	if (loadedFor !== householdId) expenses.items = [];
+	expenses.loading = loadedFor !== householdId;
 	expenses.error = null;
+	const filter = pb.filter('household = {:h}', { h: householdId });
 
 	pb.collection(COLLECTION)
-		.getFullList({ sort: '-created', expand: EXPAND })
+		.getFullList({ sort: '-created', expand: EXPAND, filter })
 		.then((records) => {
 			if (cancelled) return;
 			expenses.items = records;
 			expenses.loading = false;
-			loadedOnce = true;
+			loadedFor = householdId;
 		})
 		.catch(() => {
 			if (cancelled) return;
@@ -65,6 +71,7 @@ export function syncExpenses() {
 	pb.collection(COLLECTION).subscribe(
 		'*',
 		(e) => {
+			if (e.record.household !== householdId) return;
 			const items = expenses.items;
 			const idx = items.findIndex((x) => x.id === e.record.id);
 
@@ -79,7 +86,7 @@ export function syncExpenses() {
 				if (idx > -1) items.splice(idx, 1);
 			}
 		},
-		{ expand: EXPAND }
+		{ expand: EXPAND, filter }
 	);
 
 	return () => {
@@ -180,7 +187,8 @@ export async function addExpense({ id, title, amountCents, paidBy, sharedWith })
 				amount_cents: amountCents,
 				paid_by: paidBy,
 				shared_with: members,
-				created_by: pb.authStore.record?.id ?? ''
+				created_by: pb.authStore.record?.id ?? '',
+				household: households.activeId
 			},
 			{ expand: EXPAND }
 		);

@@ -1,5 +1,6 @@
 import { pb } from './pocketbase.svelte.js';
 import { maybeFly } from './easteregg.svelte.js';
+import { households } from './households.svelte.js';
 
 // Wo eingekauft werden soll. Die Werte muessen mit dem select-Feld
 // `items.category` uebereinstimmen (Migration 1756000005).
@@ -70,26 +71,30 @@ export const store = $state({
 // Bewusst *kein* $state: syncItems() laeuft in einem $effect, und jeder reaktive
 // Lesezugriff dort macht den Effekt von dem abhaengig, was sein eigener
 // Ladevorgang anschliessend schreibt -- Endlosschleife aus Request und Neustart.
-let loadedOnce = false;
+// Haelt den Haushalt, dessen Liste zuletzt geladen wurde.
+let loadedFor = '';
 
 /**
- * Laedt die Liste und haengt die Realtime-Subscription an.
+ * Laedt die Liste eines Haushalts und haengt die Realtime-Subscription an.
  * Aufruf aus einem $effect heraus; der Rueckgabewert ist das Teardown.
  */
-export function syncItems() {
+export function syncItems(householdId) {
 	let cancelled = false;
 	// Nur beim ersten Laden "Lade …" zeigen: beim Zurueckkehren von einer anderen
 	// Seite stehen die Eintraege noch da und wuerden sonst kurz nach unten springen.
-	store.loading = !loadedOnce;
+	// Nach einem Wechsel des Haushalts gehoeren sie aber nicht mehr hierher.
+	if (loadedFor !== householdId) store.items = [];
+	store.loading = loadedFor !== householdId;
 	store.error = null;
+	const filter = pb.filter('household = {:h}', { h: householdId });
 
 	pb.collection('items')
-		.getFullList({ sort: 'created', expand: EXPAND })
+		.getFullList({ sort: 'created', expand: EXPAND, filter })
 		.then((records) => {
 			if (cancelled) return;
 			store.items = records;
 			store.loading = false;
-			loadedOnce = true;
+			loadedFor = householdId;
 		})
 		.catch((err) => {
 			if (cancelled) return;
@@ -97,7 +102,10 @@ export function syncItems() {
 			store.loading = false;
 		});
 
+	// Der Filter spart die Events der anderen Haushalte, in denen man Gast ist;
+	// die Pruefung im Callback haelt, falls ein Event trotzdem durchkommt.
 	pb.collection('items').subscribe('*', (e) => {
+		if (e.record.household !== householdId) return;
 		const items = store.items;
 		const idx = items.findIndex((x) => x.id === e.record.id);
 
@@ -111,7 +119,7 @@ export function syncItems() {
 		} else if (e.action === 'delete') {
 			if (idx > -1) items.splice(idx, 1);
 		}
-	}, { expand: EXPAND });
+	}, { expand: EXPAND, filter });
 
 	return () => {
 		cancelled = true;
@@ -128,7 +136,8 @@ export async function addItem(name, category = DEFAULT_CATEGORY) {
 			name: trimmed,
 			category: category || DEFAULT_CATEGORY,
 			done: false,
-			added_by: pb.authStore.record?.id ?? ''
+			added_by: pb.authStore.record?.id ?? '',
+			household: households.activeId
 		},
 		{ expand: EXPAND }
 	);

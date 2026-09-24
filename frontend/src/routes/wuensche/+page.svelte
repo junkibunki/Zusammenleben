@@ -2,6 +2,7 @@
 	import GiftIcon from '@lucide/svelte/icons/gift';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
+	import { households } from '$lib/households.svelte.js';
 	import { userLabel, formatWhen } from '$lib/items.svelte.js';
 	import {
 		wishes,
@@ -31,8 +32,9 @@
 
 	// Laden + Realtime-Subscription; Teardown beim Verlassen der Seite.
 	$effect(() => {
-		if (!auth.valid) return;
-		return syncWishes();
+		const household = households.activeId;
+		if (!auth.valid || !household) return;
+		return syncWishes(household);
 	});
 
 	const valid = $derived(draft.trim().length > 0 && draft.length <= WISH_MAX);

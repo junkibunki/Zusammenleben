@@ -1,4 +1,5 @@
 import { pb } from './pocketbase.svelte.js';
+import { households } from './households.svelte.js';
 
 // Geschenkewuensche. Collection aus Migration 1789045200.
 //
@@ -33,26 +34,33 @@ export const wishes = $state({
 // Bewusst *kein* $state: syncWishes() laeuft in einem $effect, und ein reaktiver
 // Lesezugriff dort haengt den Effekt an das, was sein eigener Ladevorgang
 // anschliessend schreibt -- Endlosschleife aus Request und Neustart (CLAUDE.md).
-let loadedOnce = false;
+// Haelt den Haushalt, dessen Wuensche zuletzt geladen wurden.
+let loadedFor = '';
 
 /**
  * Laedt die Wuensche der anderen (neuste zuerst) und haengt die
  * Realtime-Subscription an. Aufruf aus einem $effect heraus; der Rueckgabewert
  * ist das Teardown.
  */
-export function syncWishes() {
+export function syncWishes(householdId) {
 	let cancelled = false;
 	// Nur beim ersten Laden "Lade …": beim Zurueckkehren steht die Liste noch da.
-	wishes.loading = !loadedOnce;
+	// Nach einem Wechsel des Haushalts gehoert sie aber nicht mehr hierher.
+	if (loadedFor !== householdId) {
+		wishes.items = [];
+		wishes.mine = null;
+	}
+	wishes.loading = loadedFor !== householdId;
 	wishes.error = null;
+	const filter = pb.filter('household = {:h}', { h: householdId });
 
 	pb.collection(COLLECTION)
-		.getFullList({ sort: '-created', expand: EXPAND })
+		.getFullList({ sort: '-created', expand: EXPAND, filter })
 		.then((records) => {
 			if (cancelled) return;
 			wishes.items = records;
 			wishes.loading = false;
-			loadedOnce = true;
+			loadedFor = householdId;
 		})
 		.catch((err) => {
 			if (cancelled) return;
@@ -64,7 +72,7 @@ export function syncWishes() {
 	// Realtime -- ihre Zahl muss deshalb aus der eigenen Route kommen. Beim
 	// Betreten der Seite ist sie ausserdem der einzige Moment, in dem ein
 	// Wunsch von einem anderen Geraet derselben Person auffaellt.
-	pb.send(MY_COUNT_URL, { method: 'GET' })
+	pb.send(MY_COUNT_URL, { method: 'GET', query: { household: householdId } })
 		.then((res) => {
 			if (!cancelled) wishes.mine = Number(res?.count ?? 0);
 		})
@@ -79,6 +87,7 @@ export function syncWishes() {
 	pb.collection(COLLECTION).subscribe(
 		'*',
 		(e) => {
+			if (e.record.household !== householdId) return;
 			const items = wishes.items;
 			const idx = items.findIndex((x) => x.id === e.record.id);
 
@@ -92,7 +101,7 @@ export function syncWishes() {
 				if (idx > -1) items.splice(idx, 1);
 			}
 		},
-		{ expand: EXPAND }
+		{ expand: EXPAND, filter }
 	);
 
 	return () => {
@@ -122,7 +131,8 @@ export async function addWish(text, note = '') {
 	const record = await pb.collection(COLLECTION).create({
 		text: trimmed,
 		note: note.trim(),
-		wisher: me
+		wisher: me,
+		household: households.activeId
 	});
 
 	// Von hier an ist der Wunsch fuer den Wuenschenden weg -- die Zahl ist das

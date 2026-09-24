@@ -77,6 +77,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 | [profil-upload.md](docs/pitfalls/profil-upload.md) | am Avatar oder einem anderen Dateifeld arbeitest |
 | [testen.md](docs/pitfalls/testen.md) | die App lokal startest oder im Browser verifizierst |
 | [deployment.md](docs/pitfalls/deployment.md) | `deploy.yml` änderst oder einem grünen Deploy glaubst |
+| [mandanten.md](docs/pitfalls/mandanten.md) | eine Rule auf `memberships` schreibst oder eine Collection pro Haushalt anlegst |
 
 ## Struktur
 
@@ -96,6 +97,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       ├── service-worker.js      # Pass-through-fetch + push/notificationclick
 │       ├── lib/
 │       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
+│       │   ├── households.svelte.js  # eigene Haushalte, aktiver Haushalt, Mitglieder
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
 │       │   ├── gundula.svelte.js     # $state des Parkplatzes + Realtime
 │       │   ├── ideas.svelte.js       # $state des Ideen-Feeds + Realtime

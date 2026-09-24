@@ -65,13 +65,3 @@ export async function updateProfile({ name, avatar } = {}) {
 	pb.authStore.save(pb.authStore.token, record);
 	return record;
 }
-
-/**
- * Alle Accounts, aelteste zuerst.
- * Serverseitig wird nur nach `created` sortiert -- nach `name` standen Accounts
- * ohne Namen vorn; die Reihenfolge in der Anzeige entscheidet die Seite anhand
- * des Anzeigenamens. Braucht die ListRule aus Migration 1756000004.
- */
-export async function listUsers() {
-	return pb.collection('users').getFullList({ sort: 'created' });
-}

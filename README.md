@@ -47,6 +47,19 @@ Accounts in der Collection `users` anlegen (Feld `name` ausfüllen) – Selbstre
 Migration abgeschaltet, ein `POST /api/collections/users/records` ohne Admin-Token
 antwortet mit `403`.
 
+**Haushalte:** ebenfalls im Admin-UI. In `households` einen Haushalt anlegen (nur
+`name`), dann in `memberships` je Person und Haushalt eine Zeile:
+
+* `role = haupt` – der Haupthaushalt, höchstens einer pro Person (Unique-Index), ohne
+  `until`.
+* `role = gast` – beliebig viele, `until` optional: ab diesem Zeitpunkt ist der Haushalt
+  für den Gast gesperrt. Leer heißt: bis die Zeile gelöscht wird.
+
+Wer keine laufende Mitgliedschaft hat, sieht in der App nur einen Hinweis (plus Ideen und
+Profil). Wer in mehreren Haushalten ist, wechselt im Menü. Beim Update auf diese Version
+legt die Migration `1789304400` den Haushalt „Zuhause“ an, hängt alle Bestandsdaten
+daran und macht alle vorhandenen Accounts dort zu Haupt-Mitgliedern.
+
 **4. Frontend-Dev-Server:**
 
 ```bash
@@ -96,11 +109,11 @@ Bewusst grob – innerhalb eines Haushalts braucht es keine feingranularen Recht
 `users.createRule` wird per zweiter Migration auf `null` gesetzt: niemand kann sich
 selbst registrieren, Accounts legt der Admin an.
 
-`users.viewRule` steht per dritter Migration auf `@request.auth.id != ""`. Ohne das
-liefert `expand=added_by,done_by` leere Objekte – PocketBase prüft beim Expand die
-ViewRule der Zielcollection, und die lässt per Default nur den eigenen Datensatz durch.
-`listRule` bleibt bewusst eng (`users` soll nicht komplett auflistbar sein), Ändern
-bleibt auf den eigenen Account beschränkt.
+`users.viewRule`/`listRule` lassen seit Migration `1789304400` nur Mitbewohner durch
+(wer in einem Haushalt steht, in dem man selbst laufend Mitglied ist), beim Einzelabruf
+zusätzlich Autoren im app-weiten Ideen-Feed. Ohne ViewRule liefert
+`expand=added_by,done_by` leere Objekte – PocketBase prüft beim Expand die ViewRule der
+Zielcollection. Ändern bleibt auf den eigenen Account beschränkt.
 
 **Beim Anlegen eines Accounts das Feld `name` ausfüllen.** Es ist das einzige Feld, das
 für die anderen Nutzer sichtbar ist – `email` liefert PocketBase nur bei

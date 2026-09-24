@@ -5,6 +5,7 @@
 	import CrosshairIcon from '@lucide/svelte/icons/crosshair';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { auth } from '$lib/pocketbase.svelte.js';
+	import { households } from '$lib/households.svelte.js';
 	import { userLabel, formatWhen } from '$lib/items.svelte.js';
 	import {
 		gundula,
@@ -51,8 +52,9 @@
 	// Laden + Realtime. Liest nichts von dem, was sein eigener Rueckweg schreibt.
 	$effect(() => {
 		attempt;
-		if (!auth.valid) return; // der Guard im Layout leitet im selben Tick um
-		return syncGundula();
+		const household = households.activeId;
+		if (!auth.valid || !household) return; // der Guard im Layout leitet im selben Tick um
+		return syncGundula(household);
 	});
 
 	// Karte aufbauen. Leaflet greift schon beim Import auf `document` zu, taugt

@@ -5,6 +5,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { auth } from '$lib/pocketbase.svelte.js';
+	import { households } from '$lib/households.svelte.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -44,8 +45,9 @@
 
 	// Laden + Realtime-Subscription; Teardown beim Verlassen der Seite.
 	$effect(() => {
-		if (!auth.valid) return;
-		return syncItems();
+		const household = households.activeId;
+		if (!auth.valid || !household) return;
+		return syncItems(household);
 	});
 
 	const open = $derived(store.items.filter((i) => !i.done));

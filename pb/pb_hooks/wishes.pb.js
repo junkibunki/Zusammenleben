@@ -43,13 +43,16 @@ onRecordCreateRequest((e) => {
 	// Steht dank CreateRule schon auf dem eigenen Account -- ausser das
 	// Admin-UI traegt fuer jemand anderen ein, dann eben auf dessen.
 	const wisher = e.record.getString('wisher');
+	// Doppelt ist ein Wunsch nur im selben Haushalt -- der Unique-Index geht
+	// ueber (`household`, `wisher`, `text_norm`), Migration 1789304400.
+	const household = e.record.getString('household');
 	if (wisher && norm) {
 		let existing = null;
 		try {
 			existing = e.app.findFirstRecordByFilter(
 				'wishes',
-				'wisher = {:wisher} && text_norm = {:norm}',
-				{ wisher: wisher, norm: norm }
+				'household = {:household} && wisher = {:wisher} && text_norm = {:norm}',
+				{ household: household, wisher: wisher, norm: norm }
 			);
 		} catch (err) {
 			// findFirstRecordByFilter wirft ("sql: no rows in result set"), statt
@@ -76,7 +79,7 @@ onRecordCreateRequest((e) => {
 	e.next();
 }, 'wishes');
 
-// Wie viele Wuensche habe *ich* abgesetzt?
+// Wie viele Wuensche habe *ich* in diesem Haushalt abgesetzt?
 //
 // Das braucht eine eigene Route: die ListRule liefert die eigenen Wuensche
 // nicht aus, der Client kann sie also nicht zaehlen. Hier kommt ausschliesslich
@@ -89,7 +92,16 @@ routerAdd(
 	(e) => {
 		// `e.auth` steht dank requireAuth -- gezaehlt wird immer der eigene
 		// Bestand, der Client kann keine andere Person angeben.
-		const count = e.app.countRecords('wishes', $dbx.hashExp({ wisher: e.auth.id }));
+		//
+		// Den Haushalt nennt der Client (`?household=`). Eine Mitgliedschaft muss
+		// hier nicht geprueft werden: gezaehlt werden nur eigene Wuensche, und
+		// die liegen ohnehin nur dort, wo man Mitglied war.
+		const household = e.request.url.query().get('household');
+		if (!household) throw new BadRequestError('household fehlt');
+		const count = e.app.countRecords(
+			'wishes',
+			$dbx.hashExp({ wisher: e.auth.id, household: household })
+		);
 		return e.json(200, { count: count });
 	},
 	$apis.requireAuth()
