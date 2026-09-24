@@ -3,10 +3,10 @@ import { pb } from './pocketbase.svelte.js';
 // Haushalte des angemeldeten Nutzers (Migration 1789304400). Welche es gibt und
 // wer wo Mitglied ist, pflegt der Superuser im Admin-UI; hier wird nur gelesen
 // und der *aktive* Haushalt gewaehlt, auf den sich Liste, Ausgaben, Wuensche
-// und Gundula beziehen.
+// und der Standort des Autos beziehen.
 
 export const households = $state({
-	// { id, name, role: 'haupt' | 'gast', until } -- nur laufende
+	// { id, name, carName, role: 'haupt' | 'gast', until } -- nur laufende
 	// Mitgliedschaften, Haupthaushalt zuerst.
 	list: [],
 	activeId: '',
@@ -24,6 +24,19 @@ export function isActiveMembership(membership) {
 /** Der aktive Haushalt als Eintrag aus `households.list`; null, wenn keiner. */
 export function activeHousehold() {
 	return households.list.find((h) => h.id === households.activeId) ?? null;
+}
+
+/**
+ * Wie der aktive Haushalt sein Auto nennt (Migration 1789390800). Das Feld ist
+ * Pflicht; "Auto" greift nur, solange noch kein Haushalt geladen ist.
+ */
+export function carName() {
+	return activeHousehold()?.carName || 'Auto';
+}
+
+/** Genitiv eines Namens: "Gundulas", aber "Max'" -- fuer "…s Standort". */
+export function genitive(name) {
+	return /[sßxz]$/i.test(name) ? `${name}'` : `${name}s`;
 }
 
 // Pro Account gemerkt: auf einem geteilten Geraet soll der naechste nicht im
@@ -75,6 +88,7 @@ export function syncHouseholds(userId) {
 					.map((m) => ({
 						id: m.household,
 						name: m.expand.household.name,
+						carName: m.expand.household.car_name,
 						role: m.role,
 						until: m.until
 					}))
@@ -117,11 +131,15 @@ export function syncHouseholds(userId) {
 	pb.collection('memberships').subscribe('*', () => load(), {
 		filter: pb.filter('user = {:u}', { u: userId })
 	});
+	// Und die Haushalte selbst: benennt der Superuser einen (oder sein Auto) um,
+	// soll das ohne Neuladen dastehen. Die ListRule liefert nur die eigenen.
+	pb.collection('households').subscribe('*', () => load());
 
 	return () => {
 		cancelled = true;
 		clearTimeout(expiryTimer);
 		pb.collection('memberships').unsubscribe('*');
+		pb.collection('households').unsubscribe('*');
 		households.list = [];
 		households.activeId = '';
 		households.loading = true;

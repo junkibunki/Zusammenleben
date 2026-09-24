@@ -5,7 +5,7 @@
 	import CrosshairIcon from '@lucide/svelte/icons/crosshair';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { auth } from '$lib/pocketbase.svelte.js';
-	import { households } from '$lib/households.svelte.js';
+	import { households, carName, genitive } from '$lib/households.svelte.js';
 	import { userLabel, formatWhen } from '$lib/items.svelte.js';
 	import {
 		gundula,
@@ -34,7 +34,7 @@
 	let map = null;
 	let carMarker = null;
 	let pickMarker = null;
-	let centeredOnce = false;
+	let centeredFor = ''; // ID des Records, auf den die Karte zuletzt gesprungen ist
 
 	let mapReady = $state(false);
 	let pick = $state(null); // auf der Karte gewaehlter Platz, noch nicht gespeichert
@@ -48,6 +48,9 @@
 	const record = $derived(gundula.record);
 	const parked = $derived(hasLocation(record));
 	const parkedBy = $derived(userLabel(record?.expand?.parked_by));
+	// Jeder Haushalt nennt sein Auto anders (`households.car_name`).
+	const car = $derived(carName());
+	const cars = $derived(genitive(car));
 
 	// Laden + Realtime. Liest nichts von dem, was sein eigener Rueckweg schreibt.
 	$effect(() => {
@@ -122,13 +125,14 @@
 		if (carMarker) {
 			carMarker.setLatLng(pos);
 		} else {
-			carMarker = pinMarker(pos, 'car', 'Gundula steht hier').addTo(map);
+			carMarker = pinMarker(pos, 'car', `${car} steht hier`).addTo(map);
 		}
 
 		// Nur einmal hinschauen: wer gerade selbst auf der Karte sucht, will nicht
-		// weggeschoben werden, wenn im Hintergrund ein Realtime-Event kommt.
-		if (!centeredOnce) {
-			centeredOnce = true;
+		// weggeschoben werden, wenn im Hintergrund ein Realtime-Event kommt. Nach
+		// einem Wechsel des Haushalts ist es aber ein anderes Auto.
+		if (centeredFor !== rec.id) {
+			centeredFor = rec.id;
 			map.setView(pos, PARKED_ZOOM);
 		}
 	});
@@ -258,7 +262,7 @@
 		<div
 			bind:this={mapEl}
 			role="application"
-			aria-label="Karte mit Gundulas Standort. Tippen wählt einen Platz."
+			aria-label="Karte mit {cars} Standort. Tippen wählt einen Platz."
 			class="absolute inset-0"
 		></div>
 
@@ -267,7 +271,7 @@
 				variant="secondary"
 				size="icon-lg"
 				class="absolute top-2 right-2 z-[1100] size-11 shadow"
-				aria-label="Karte auf Gundula zentrieren"
+				aria-label="Karte auf {car} zentrieren"
 				onclick={recenter}
 			>
 				<CrosshairIcon class="size-5" />
@@ -292,7 +296,7 @@
 				{formatWhen(record.parked_at)}
 			</p>
 		{:else}
-			<p class="text-sm">Gundulas Standort ist noch nicht gesetzt.</p>
+			<p class="text-sm">{cars} Standort ist noch nicht gesetzt.</p>
 		{/if}
 
 		{#if pick}
@@ -313,7 +317,7 @@
 
 		<Button size="lg" class="h-11 w-full" disabled={locating || saving} onclick={askToPark}>
 			<CarIcon class="size-4" />
-			{locating ? 'Standort wird ermittelt …' : 'Gundula hier parken'}
+			{locating ? 'Standort wird ermittelt …' : `${car} hier parken`}
 		</Button>
 	</div>
 </main>
@@ -321,12 +325,12 @@
 <AlertDialog.Root bind:open={confirmOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>Gundula hier parken?</AlertDialog.Title>
+			<AlertDialog.Title>{car} hier parken?</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if pending?.source === 'geo'}
-					Gundulas Standort wird für alle auf deinen aktuellen Standort gesetzt.
+					{cars} Standort wird für alle auf deinen aktuellen Standort gesetzt.
 				{:else}
-					Gundulas Standort wird für alle auf den gewählten Platz gesetzt.
+					{cars} Standort wird für alle auf den gewählten Platz gesetzt.
 				{/if}
 				{#if parked}
 					Der bisherige Standort geht dabei verloren.

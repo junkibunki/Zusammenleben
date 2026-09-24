@@ -47,8 +47,9 @@ Accounts in der Collection `users` anlegen (Feld `name` ausfüllen) – Selbstre
 Migration abgeschaltet, ein `POST /api/collections/users/records` ohne Admin-Token
 antwortet mit `403`.
 
-**Haushalte:** ebenfalls im Admin-UI. In `households` einen Haushalt anlegen (nur
-`name`), dann in `memberships` je Person und Haushalt eine Zeile:
+**Haushalte:** ebenfalls im Admin-UI. In `households` einen Haushalt anlegen (`name`
+und `car_name` – wie das Auto auf der Seite „Wo ist …“ heißt, Bestand: „Gundula“), dann
+in `memberships` je Person und Haushalt eine Zeile:
 
 * `role = haupt` – der Haupthaushalt, höchstens einer pro Person (Unique-Index), ohne
   `until`.
@@ -56,7 +57,7 @@ antwortet mit `403`.
   für den Gast gesperrt. Leer heißt: bis die Zeile gelöscht wird.
 
 Wer keine laufende Mitgliedschaft hat, sieht in der App nur einen Hinweis (plus Ideen und
-Profil). Wer in mehreren Haushalten ist, wechselt im Menü. Beim Update auf diese Version
+Profil). Wer in mehreren Haushalten ist, wechselt über den Knopf unten im Menü. Beim Update auf diese Version
 legt die Migration `1789304400` den Haushalt „Zuhause“ an, hängt alle Bestandsdaten
 daran und macht alle vorhandenen Accounts dort zu Haupt-Mitgliedern.
 

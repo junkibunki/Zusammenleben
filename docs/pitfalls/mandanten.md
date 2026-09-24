@@ -5,7 +5,7 @@ Collection anlegst, die pro Haushalt getrennt sein soll.
 
 ## Modell
 
-`households` (nur `name`) und `memberships` (`user`, `household`, `role` = `haupt`|`gast`,
+`households` (`name`, `car_name` = Name des Autos) und `memberships` (`user`, `household`, `role` = `haupt`|`gast`,
 `until`). Gepflegt im Admin-UI, alle Schreib-Rules `null`. „Höchstens ein Haupthaushalt"
 ist der partielle Unique-Index `idx_memberships_main … WHERE role = 'haupt'`, kein Hook.
 Laufend ist eine Mitgliedschaft mit leerem oder künftigem `until`; abgelaufene Zeilen
