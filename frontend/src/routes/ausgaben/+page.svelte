@@ -13,6 +13,7 @@
 		syncExpenses,
 		addExpense,
 		deleteExpense,
+		settleDebt,
 		newExpenseId,
 		splitShares,
 		computeSettlement,
@@ -28,6 +29,7 @@
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -59,6 +61,14 @@
 	let payerOpen = $state(false);
 	let splitOpen = $state(false);
 	let debtsOpen = $state(false);
+
+	// Schuldenuebersicht, geoeffnet ueber den eigenen Saldo.
+	let mineOpen = $state(false);
+	let settling = $state([]); // Glaeubiger-IDs, deren Ausgleich gerade gespeichert wird
+	let settleError = $state(null);
+	// Glaeubiger-ID -> Record-ID des noch nicht bestaetigten Ausgleichs. Kein
+	// $state: steuert nur, welche ID der naechste Versuch nimmt.
+	const settleIds = new Map();
 
 	// Laden + Realtime-Subscription; Teardown beim Verlassen der Seite.
 	$effect(() => {
@@ -257,6 +267,39 @@
 			.sort((a, b) => b.cents - a.cents || nameOf(a.id).localeCompare(nameOf(b.id), 'de'))
 	);
 
+	// Die eigenen Paarschulden aus demselben Schuldbuch wie Salden und "Wer wem
+	// was" -- die Summe beider Listen ist also genau der eigene Saldo.
+	const myDebts = $derived(settlement.debts.filter((d) => d.from === auth.user?.id));
+	const owedToMe = $derived(settlement.debts.filter((d) => d.to === auth.user?.id));
+
+	function openMine() {
+		settleError = null;
+		mineOpen = true;
+	}
+
+	async function settle(debt) {
+		if (settling.includes(debt.to)) return;
+		settling.push(debt.to);
+		settleError = null;
+		// Die ID ueberlebt einen Fehlschlag: ging nur die Antwort verloren, trifft
+		// der naechste Tipp denselben Eintrag statt einen zweiten Ausgleich.
+		const id = settleIds.get(debt.to) ?? newExpenseId();
+		settleIds.set(debt.to, id);
+		try {
+			// Der Betrag ist der, der gerade dasteht -- genau den hat man angetippt.
+			const { mismatch } = await settleDebt({ ...debt, id, toName: nameOf(debt.to) });
+			settleIds.delete(debt.to);
+			// Lag unter der ID schon ein Ausgleich mit anderem Betrag: der zaehlt,
+			// die Uebersicht zeigt, was danach noch offen ist.
+			if (mismatch) settleError = 'Ein früherer Ausgleich war schon gespeichert — bitte den Restbetrag prüfen.';
+		} catch (err) {
+			settleError = err?.userFacing ? err.message : 'Der Ausgleich konnte nicht eingetragen werden.';
+		} finally {
+			const i = settling.indexOf(debt.to);
+			if (i > -1) settling.splice(i, 1);
+		}
+	}
+
 	/** "bezahlt von Anna · heute 19:41" -- plus den Eintragenden, falls das ein anderer war. */
 	function metaFor(expense) {
 		const parts = [];
@@ -317,6 +360,41 @@
 			Nur {negative ? 'der Empfänger' : 'der Zahler'} ausgewählt — der Eintrag verschiebt keinen
 			Saldo.
 		</p>
+	{/if}
+{/snippet}
+
+{#snippet saldoRow(row, label, photo, mine)}
+	<Avatar.Root class="shrink-0">
+		{#if photo}
+			<Avatar.Image src={photo} alt="" />
+		{/if}
+		<Avatar.Fallback class="text-xs">
+			{label.charAt(0).toUpperCase()}
+		</Avatar.Fallback>
+	</Avatar.Root>
+	<div class="flex min-w-0 flex-1 items-center gap-2">
+		<span class="truncate">{label}</span>
+		{#if mine}
+			<Badge variant="secondary" class="shrink-0">du</Badge>
+		{/if}
+	</div>
+	<!-- Das Vorzeichen steht als Wort da, nicht nur als Farbe. Rot fuer
+	     Schulden kommt dazu (`destructive` ist ein Palettenwert), ein
+	     Gegenstueck fuer Guthaben nicht: Gruen waere im neutralen
+	     Designsystem der einzige Fremdfarbwert. -->
+	{#if row.cents > 0}
+		<span class="shrink-0 text-sm font-medium tabular-nums">
+			bekommt {formatEuro(row.cents)}
+		</span>
+	{:else if row.cents < 0}
+		<span class="text-destructive shrink-0 text-sm font-medium tabular-nums">
+			schuldet {formatEuro(-row.cents)}
+		</span>
+	{:else}
+		<span class="text-muted-foreground shrink-0 text-sm">ausgeglichen</span>
+	{/if}
+	{#if mine}
+		<ChevronRightIcon class="text-muted-foreground size-4 shrink-0" />
 	{/if}
 {/snippet}
 
@@ -593,35 +671,23 @@
 				{#each saldi as row (row.id)}
 					{@const label = nameOf(row.id)}
 					{@const photo = avatarUrl(people.get(row.id))}
-					<li class="flex items-center gap-3 px-3 py-3">
-						<Avatar.Root class="shrink-0">
-							{#if photo}
-								<Avatar.Image src={photo} alt="" />
-							{/if}
-							<Avatar.Fallback class="text-xs">
-								{label.charAt(0).toUpperCase()}
-							</Avatar.Fallback>
-						</Avatar.Root>
-						<div class="flex min-w-0 flex-1 items-center gap-2">
-							<span class="truncate">{label}</span>
-							{#if row.id === auth.user?.id}
-								<Badge variant="secondary" class="shrink-0">du</Badge>
-							{/if}
-						</div>
-						<!-- Das Vorzeichen steht als Wort da, nicht nur als Farbe. Rot fuer
-						     Schulden kommt dazu (`destructive` ist ein Palettenwert), ein
-						     Gegenstueck fuer Guthaben nicht: Gruen waere im neutralen
-						     Designsystem der einzige Fremdfarbwert. -->
-						{#if row.cents > 0}
-							<span class="shrink-0 text-sm font-medium tabular-nums">
-								bekommt {formatEuro(row.cents)}
-							</span>
-						{:else if row.cents < 0}
-							<span class="text-destructive shrink-0 text-sm font-medium tabular-nums">
-								schuldet {formatEuro(-row.cents)}
-							</span>
+					{@const mine = row.id === auth.user?.id}
+					<li>
+						<!-- Nur die eigene Zeile ist antippbar: sie oeffnet die Uebersicht, wem
+						     man was schuldet. Fremde Zeilen bleiben reine Anzeige. -->
+						{#if mine}
+							<button
+								type="button"
+								class="hover:bg-accent focus-visible:ring-ring/50 flex w-full items-center gap-3 px-3 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-inset"
+								aria-haspopup="dialog"
+								onclick={openMine}
+							>
+								{@render saldoRow(row, label, photo, true)}
+							</button>
 						{:else}
-							<span class="text-muted-foreground shrink-0 text-sm">ausgeglichen</span>
+							<div class="flex items-center gap-3 px-3 py-3">
+								{@render saldoRow(row, label, photo, false)}
+							</div>
 						{/if}
 					</li>
 				{/each}
@@ -668,8 +734,8 @@
 				     *verdoppelt* die Schuld, statt sie zu tilgen -- und das sieht in der
 				     Liste aus wie ein erledigter Ausgleich. -->
 				<p class="text-muted-foreground mt-1.5 px-1 text-xs">
-					Beglichen? Als Ausgabe eintragen: „Bezahlt von" ist, wer das Geld gegeben hat,
-					aufgeteilt wird nur auf die Person, die es bekommen hat.
+					Beglichen? Tipp oben auf deinen Saldo — dort lässt sich jede eigene Schuld mit einem
+					Tipp als bezahlt eintragen.
 				</p>
 			{/if}
 		</div>
@@ -739,6 +805,75 @@
 		{/if}
 	</div>
 </main>
+
+<Sheet.Root bind:open={mineOpen}>
+	<Sheet.Content side="bottom" class="safe-b max-h-[85dvh] gap-0 overflow-y-auto">
+		<Sheet.Header class="p-4 pr-12">
+			<Sheet.Title>Deine Schulden</Sheet.Title>
+			<Sheet.Description>
+				Überwiesen wird außerhalb der App. „Begleichen" trägt die Zahlung hier ein.
+			</Sheet.Description>
+		</Sheet.Header>
+
+		<div class="flex flex-col gap-4 px-4 pb-4">
+			{#if settleError}
+				<Alert.Root variant="destructive">
+					<Alert.Description>{settleError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+
+			{#if myDebts.length === 0 && owedToMe.length === 0}
+				<p class="text-muted-foreground py-6 text-center text-sm">Du bist mit allen quitt.</p>
+			{/if}
+
+			{#if myDebts.length > 0}
+				<div>
+					<p class="text-muted-foreground mb-1.5 px-1 text-xs font-medium tracking-wide uppercase">
+						Du schuldest
+					</p>
+					<ul class="divide-y rounded-lg border">
+						{#each myDebts as debt (debt.to)}
+							{@const busy = settling.includes(debt.to)}
+							<li class="flex items-center gap-3 py-2 pr-2 pl-3">
+								<span class="min-w-0 flex-1 truncate text-sm">{nameOf(debt.to)}</span>
+								<span class="text-destructive shrink-0 text-sm font-medium tabular-nums">
+									{formatEuro(debt.cents)}
+								</span>
+								<Button
+									size="lg"
+									class="h-11 shrink-0"
+									disabled={busy}
+									aria-label={`${formatEuro(debt.cents)} an ${nameOf(debt.to)} als bezahlt eintragen`}
+									onclick={() => settle(debt)}
+								>
+									{busy ? 'Trage ein …' : 'Begleichen'}
+								</Button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+
+			{#if owedToMe.length > 0}
+				<div>
+					<p class="text-muted-foreground mb-1.5 px-1 text-xs font-medium tracking-wide uppercase">
+						Schuldet dir
+					</p>
+					<ul class="divide-y rounded-lg border">
+						{#each owedToMe as debt (debt.from)}
+							<li class="flex items-center gap-3 px-3 py-3">
+								<span class="min-w-0 flex-1 truncate text-sm">{nameOf(debt.from)}</span>
+								<span class="shrink-0 text-sm font-medium tabular-nums">
+									{formatEuro(debt.cents)}
+								</span>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+		</div>
+	</Sheet.Content>
+</Sheet.Root>
 
 <AlertDialog.Root bind:open={confirmOpen}>
 	<AlertDialog.Content>

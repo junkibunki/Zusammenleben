@@ -215,6 +215,45 @@ export async function addExpense({ id, title, amountCents, paidBy, sharedWith })
 	return { record, mismatch };
 }
 
+/**
+ * Eine Schuld als beglichen eintragen: eine Ausgabe, die der Schuldner bezahlt
+ * und die nur auf den Glaeubiger geteilt wird. Das hebt in `computeSettlement`
+ * genau diese Paarschuld auf. Das Geld selbst fliesst ausserhalb der App.
+ *
+ * `from` ist in der Praxis der eigene Account -- die Seite bietet es nur fuer
+ * die eigenen Schulden an.
+ *
+ * `id` wie bei `addExpense`: ein zweiter Versuch nach verlorener Antwort soll
+ * denselben Eintrag treffen, nicht einen zweiten Ausgleich anlegen.
+ *
+ * Ein Eintrag hat hoechstens `AMOUNT_MAX_CENTS`, eine Paarschuld ist dagegen
+ * eine Summe ohne Obergrenze. Darueber hinaus wird deshalb nur bis zur Grenze
+ * beglichen; der Rest bleibt stehen und laesst sich erneut begleichen.
+ *
+ * @returns wie `addExpense`
+ */
+export async function settleDebt({ id, from, to, cents, toName }) {
+	if (!from || !to || from === to) throw userError('Diese Schuld lässt sich nicht begleichen.');
+	try {
+		return await addExpense({
+			id,
+			title: `Ausgleich an ${toName || 'Jemand'}`.slice(0, TITLE_MAX),
+			amountCents: Math.min(cents, AMOUNT_MAX_CENTS),
+			paidBy: from,
+			sharedWith: [to]
+		});
+	} catch (err) {
+		// Der Hook (expenses.pb.js) laesst nur aktuelle Mitglieder in die
+		// Aufteilung -- ein Gast, dessen Zeit abgelaufen ist, faellt hier heraus.
+		if (err?.response?.data?.shared_with?.code === 'expense_not_member') {
+			throw userError(
+				`${toName || 'Diese Person'} gehört nicht mehr zum Haushalt — der Ausgleich lässt sich nicht eintragen.`
+			);
+		}
+		throw err;
+	}
+}
+
 /** Ausgabe loeschen. Optimistisch, mit Rollback bei einem Fehler. */
 export async function deleteExpense(expense) {
 	const items = expenses.items;
