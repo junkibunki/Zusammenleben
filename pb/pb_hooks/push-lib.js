@@ -223,6 +223,16 @@ function householdLabel(app, id) {
 	}
 }
 
+/** Name einer Kategorie (Migration 1789477200); leer, wenn keine oder geloescht. */
+function categoryLabel(app, id) {
+	if (!id) return '';
+	try {
+		return app.findRecordById('categories', id).getString('name');
+	} catch {
+		return '';
+	}
+}
+
 /** Probebenachrichtigung an alle Geraete *einer* Person. */
 function sendTest(app, userId) {
 	const subscriptions = app.findRecordsByFilter(
@@ -266,7 +276,8 @@ function notifyNewItem(app, record, actorId) {
 	const from = userLabel(app, record.getString('added_by'));
 
 	const details = [];
-	if (record.getString('category')) details.push(record.getString('category'));
+	const category = categoryLabel(app, record.getString('category'));
+	if (category) details.push(category);
 	if (from) details.push(`von ${from}`);
 	// Wer Gast in einem zweiten Haushalt ist, muss sehen, auf welchem Zettel
 	// das steht.

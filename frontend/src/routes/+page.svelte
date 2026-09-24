@@ -19,10 +19,9 @@
 		deleteItem,
 		clearDone,
 		userLabel,
-		formatWhen,
-		CATEGORIES,
-		DEFAULT_CATEGORY
+		formatWhen
 	} from '$lib/items.svelte.js';
+	import { categories, orderedCategories, NO_CATEGORY } from '$lib/categories.svelte.js';
 	import { isCollapsed, toggleCategory, expandCategory } from '$lib/collapse.svelte.js';
 
 	// "Anna · heute 19:41 · gekauft von Papa" -- leere Teile fallen raus.
@@ -40,7 +39,10 @@
 	}
 
 	let draft = $state('');
-	let category = $state(DEFAULT_CATEGORY);
+	// ID der gewaehlten Kategorie. Kann leer sein oder auf eine inzwischen
+	// geloeschte bzw. haushaltsfremde zeigen -- `chosen` normalisiert das an
+	// *einer* Stelle auf die erste Kategorie.
+	let category = $state('');
 	let showDone = $state(false);
 
 	// Laden + Realtime-Subscription; Teardown beim Verlassen der Seite.
@@ -53,22 +55,33 @@
 	const open = $derived(store.items.filter((i) => !i.done));
 	const done = $derived(store.items.filter((i) => i.done));
 
-	const groups = $derived(
-		CATEGORIES.map((c) => ({
-			category: c,
-			items: open.filter((i) => (i.category || DEFAULT_CATEGORY) === c)
-		})).filter((g) => g.items.length > 0)
-	);
+	const ordered = $derived(orderedCategories());
+	const chosen = $derived(ordered.find((c) => c.id === category) ?? ordered[0] ?? null);
+
+	// In der Reihenfolge der Kategorien; was keine (mehr) hat, steht am Ende
+	// unter "Ohne Kategorie" (Schluessel "").
+	const groups = $derived.by(() => {
+		const known = new Set(ordered.map((c) => c.id));
+		const list = ordered.map((c) => ({
+			key: c.id,
+			label: c.name,
+			items: open.filter((i) => i.category === c.id)
+		}));
+		list.push({ key: '', label: NO_CATEGORY, items: open.filter((i) => !known.has(i.category)) });
+		return list.filter((g) => g.items.length > 0);
+	});
+
+	// Ohne Kategorien stuende alles kurz unter "Ohne Kategorie" und sprange dann.
+	const loading = $derived(store.loading || (categories.loading && categories.list.length === 0));
+	const error = $derived(store.error ?? categories.error);
 
 	async function submit(e) {
 		e.preventDefault();
 		const name = draft;
 		if (!name.trim()) return;
 		draft = '';
-		// Einmal normalisieren: das Select laesst sich abwaehlen (leerer Wert), und
-		// addItem() wuerde daraus die Standardkategorie machen -- aufgeklappt werden
-		// muss genau die, unter der der Eintrag dann steht.
-		const target = category || DEFAULT_CATEGORY;
+		// Aufgeklappt werden muss genau die Gruppe, unter der der Eintrag dann steht.
+		const target = chosen?.id ?? '';
 		try {
 			await addItem(name, target);
 			// Sonst landet der neue Eintrag unsichtbar in einer zugeklappten Gruppe.
@@ -84,13 +97,20 @@
 	class="bg-background sticky top-(--header-h) z-10 flex items-center gap-2 border-b px-3 py-2.5"
 	onsubmit={submit}
 >
-	<Select.Root type="single" bind:value={category}>
+	<!-- Kein bind:value: das Select laesst sich abwaehlen (""), angezeigt und
+	     benutzt wird immer `chosen`. -->
+	<Select.Root
+		type="single"
+		value={chosen?.id ?? ''}
+		onValueChange={(v) => (category = v)}
+		disabled={ordered.length === 0}
+	>
 		<Select.Trigger class="h-11 w-32 shrink-0 data-[size=default]:h-11" aria-label="Wo einkaufen">
-			{category}
+			<span class="truncate">{chosen?.name ?? NO_CATEGORY}</span>
 		</Select.Trigger>
 		<Select.Content>
-			{#each CATEGORIES as c (c)}
-				<Select.Item value={c} label={c}>{c}</Select.Item>
+			{#each ordered as c (c.id)}
+				<Select.Item value={c.id} label={c.name}>{c.name}</Select.Item>
 			{/each}
 		</Select.Content>
 	</Select.Root>
@@ -105,16 +125,19 @@
 	/>
 </form>
 
-{#if store.error}
+{#if error}
 	<div class="px-3 pt-3">
 		<Alert.Root variant="destructive">
-			<Alert.Description>{store.error}</Alert.Description>
+			<Alert.Description>{error}</Alert.Description>
 			<Alert.Action>
 				<Button
 					variant="ghost"
 					size="icon-sm"
 					aria-label="Meldung schließen"
-					onclick={() => (store.error = null)}
+					onclick={() => {
+						store.error = null;
+						categories.error = null;
+					}}
 				>
 					<XIcon class="size-4" />
 				</Button>
@@ -124,7 +147,7 @@
 {/if}
 
 <main class="flex-1 px-3 pt-3 pb-8">
-	{#if store.loading}
+	{#if loading}
 		<p class="text-muted-foreground py-12 text-center text-sm">Lade …</p>
 	{:else if store.items.length === 0}
 		<p class="text-muted-foreground py-12 text-center text-sm">Die Liste ist leer. 🎉</p>
@@ -192,8 +215,8 @@
 		</div>
 	{/snippet}
 
-	{#each groups as group (group.category)}
-		{@const collapsed = isCollapsed(group.category)}
+	{#each groups as group (group.key)}
+		{@const collapsed = isCollapsed(group.key)}
 		<section class="mb-4">
 			<!-- Ueberschrift und Schalter in einem: die Zeile bleibt fuer Screenreader
 			     eine Gliederungsebene, fuer den Daumen eine 44px hohe Flaeche. -->
@@ -202,14 +225,14 @@
 					type="button"
 					class="text-muted-foreground focus-visible:ring-ring/50 flex h-11 w-full items-center gap-1.5 rounded-md px-1 text-left text-xs font-medium tracking-wide uppercase outline-none focus-visible:ring-[3px]"
 					aria-expanded={!collapsed}
-					onclick={() => toggleCategory(group.category)}
+					onclick={() => toggleCategory(group.key)}
 				>
 					{#if collapsed}
 						<ChevronRightIcon class="size-4 shrink-0" />
 					{:else}
 						<ChevronDownIcon class="size-4 shrink-0" />
 					{/if}
-					<span class="truncate">{group.category}</span>
+					<span class="truncate">{group.label}</span>
 					<span class="shrink-0 normal-case">({group.items.length})</span>
 				</button>
 			</h2>

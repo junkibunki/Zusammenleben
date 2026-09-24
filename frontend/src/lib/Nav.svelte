@@ -10,6 +10,7 @@
 	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import HouseIcon from '@lucide/svelte/icons/house';
+	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { auth, logout, avatarUrl } from '$lib/pocketbase.svelte.js';
 	import { tapAvatar } from '$lib/easteregg.svelte.js';
 	import { households, activeHousehold, carName } from '$lib/households.svelte.js';
@@ -53,7 +54,9 @@
 			? 'Eintrag'
 			: page.url.pathname === '/haushalte'
 				? 'Haushalte'
-				: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
+				: page.url.pathname === '/einstellungen'
+					? 'Haushalt-Einstellungen'
+					: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
 	);
 	const photo = $derived(avatarUrl(auth.user));
 	const label = $derived(auth.user?.name || auth.user?.email?.split('@')[0] || '');
@@ -63,6 +66,8 @@
 	// einen gibt -- sonst gibt es nichts zu waehlen.
 	const current = $derived(activeHousehold());
 	const several = $derived(households.list.length > 1);
+	// Die Einstellungen aendern nur Haupt-Mitglieder; Gaeste haetten dort nichts zu tun.
+	const isMain = $derived(current?.role === 'haupt');
 </script>
 
 <header class="safe-t bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
@@ -114,6 +119,19 @@
 
 				<div class="safe-b p-2">
 					<Separator class="mb-2" />
+					{#if isMain}
+						{@const active = page.url.pathname === '/einstellungen'}
+						<Button
+							href="/einstellungen"
+							variant={active ? 'secondary' : 'ghost'}
+							size="lg"
+							class="mb-1 h-11 w-full justify-start"
+							aria-current={active ? 'page' : undefined}
+						>
+							<SettingsIcon class="size-4" />
+							Haushalt-Einstellungen
+						</Button>
+					{/if}
 					{#if several}
 						{@const active = page.url.pathname === '/haushalte'}
 						<Button

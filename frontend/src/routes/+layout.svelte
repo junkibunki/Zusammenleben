@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/pocketbase.svelte.js';
 	import { households, syncHouseholds } from '$lib/households.svelte.js';
+	import { syncCategories } from '$lib/categories.svelte.js';
 	import Nav from '$lib/Nav.svelte';
 	import Dragon from '$lib/Dragon.svelte';
 
@@ -28,6 +29,14 @@
 	$effect(() => {
 		if (!userId) return;
 		return syncHouseholds(userId);
+	});
+
+	// Kategorien des aktiven Haushalts: der Zettel und die Einstellungen lesen
+	// beide daraus, deshalb eine Subscription hier statt je Seite.
+	$effect(() => {
+		const household = households.activeId;
+		if (!userId || !household) return;
+		return syncCategories(household);
 	});
 </script>
 

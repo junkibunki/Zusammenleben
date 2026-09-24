@@ -2,8 +2,9 @@
 // alles ausser "Baumarkt" zuklappt, will das nach dem naechsten Oeffnen der PWA
 // nicht wiederholen -- deshalb liegt der Zustand im localStorage und nicht nur
 // im Speicher der Seite.
-
-import { CATEGORIES } from './items.svelte.js';
+//
+// Gemerkt werden die IDs der Kategorien (Migration 1789477200), "" steht fuer
+// "Ohne Kategorie". IDs geloeschter Kategorien bleiben liegen und stoeren nicht.
 
 const KEY = 'einkaufsliste.collapsed';
 
@@ -14,7 +15,7 @@ function load() {
 		if (!raw) return [];
 		const list = JSON.parse(raw);
 		if (!Array.isArray(list)) return [];
-		return list.filter((c) => CATEGORIES.includes(c));
+		return list.filter((c) => typeof c === 'string');
 	} catch {
 		// Privater Modus, gesperrter Speicher, kaputter Eintrag: dann eben alles offen.
 		return [];

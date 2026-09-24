@@ -2,12 +2,6 @@ import { pb } from './pocketbase.svelte.js';
 import { maybeFly } from './easteregg.svelte.js';
 import { households } from './households.svelte.js';
 
-// Wo eingekauft werden soll. Die Werte muessen mit dem select-Feld
-// `items.category` uebereinstimmen (Migration 1756000005).
-export const CATEGORIES = ['Supermarkt', 'Drogerie', 'Baumarkt', 'IKEA'];
-
-export const DEFAULT_CATEGORY = 'Supermarkt';
-
 // Relations mitladen, sonst steht in der Zeile nur eine Record-ID.
 const EXPAND = 'added_by,done_by';
 
@@ -127,14 +121,15 @@ export function syncItems(householdId) {
 	};
 }
 
-export async function addItem(name, category = DEFAULT_CATEGORY) {
+/** `category` ist die ID einer Kategorie des aktiven Haushalts; leer = ohne. */
+export async function addItem(name, category = '') {
 	const trimmed = name.trim();
 	if (!trimmed) return;
 
 	const record = await pb.collection('items').create(
 		{
 			name: trimmed,
-			category: category || DEFAULT_CATEGORY,
+			category: category || '',
 			done: false,
 			added_by: pb.authStore.record?.id ?? '',
 			household: households.activeId

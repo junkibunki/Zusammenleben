@@ -97,7 +97,7 @@ Collection `items` (Migration `pb/pb_migrations/1756000000_created_items.js`):
 | --------------------- | ---------------- | -------------------------------------------------------------- |
 | `name`                | text             | required                                                       |
 | `quantity`            | text             | optional, Freitext ("2 Packungen")                             |
-| `category`            | select (1)       | Obst/Gemüse, Kühlregal, Trocken, Getränke, Drogerie, Sonstiges |
+| `category`            | relation → categories | optional; Kategorien pro Haushalt (Migration `1789477200`) |
 | `done`                | bool             | nicht gesetzt = false                                          |
 | `note`                | text             | optional                                                       |
 | `added_by`            | relation → users |                                                                |

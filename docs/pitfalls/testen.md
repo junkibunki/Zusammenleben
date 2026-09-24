@@ -60,6 +60,14 @@ Muss **genau einen** Namen ausgeben. Heilmittel ist ein erneutes `build.sh`.
   keine Meldung an, erst ins `_logs` schauen: steht dort kein „Push abgelehnt", hat der
   Dienst die Nachricht angenommen und es ist ein Headless-Effekt.
 
+### Ausweg: `playwright-core` aus dem npx-Cache
+
+Ist der Playwright-MCP belegt (`Browser is already in use`), geht es auch ohne CDP von
+Hand: `playwright-core` liegt im npx-Cache
+(`find "$LOCALAPPDATA/npm-cache/_npx" -maxdepth 4 -name playwright-core`), per
+absolutem Pfad `require`n und `chromium.launch({ executablePath: …/chrome.exe, args:
+['--no-sandbox'] })` mit der Binary von unten. Skript als `.cjs` in den Scratchpad legen.
+
 ### Ausweg: Chromium selbst per CDP fahren
 
 Der Playwright-MCP-Browser kann von einer *parallelen* Session belegt sein

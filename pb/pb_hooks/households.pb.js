@@ -31,6 +31,35 @@ onRecordAfterCreateSuccess((e) => {
 	}
 }, 'households');
 
+// Jeder neue Haushalt startet mit denselben Kategorien wie die Bestandshaushalte
+// (Migration 1789477200); danach pflegen die Haupt-Mitglieder sie auf der Seite
+// "Haushalt-Einstellungen".
+onRecordAfterCreateSuccess((e) => {
+	e.next();
+	try {
+		// Laeuft der Hook waehrend einer Migration, gibt es `categories` evtl.
+		// noch nicht -- dann versorgt die Migration 1789477200 den Haushalt.
+		const collection = e.app.findCollectionByNameOrId('categories');
+		const existing = e.app.findRecordsByFilter('categories', 'household = {:h}', '', 1, 0, {
+			h: e.record.id
+		});
+		if (existing.length > 0) return;
+		['Supermarkt', 'Drogerie', 'Baumarkt', 'IKEA'].forEach((name, i) => {
+			const c = new Record(collection);
+			c.set('household', e.record.id);
+			c.set('name', name);
+			c.set('sort', i);
+			e.app.save(c);
+		});
+	} catch (err) {
+		// Der Haushalt steht schon; ohne Kategorien landet alles unter "Ohne
+		// Kategorie", und anlegen kann sie jedes Haupt-Mitglied selbst.
+		e.app
+			.logger()
+			.warn('Standard-Kategorien fuer neuen Haushalt fehlen', 'haushalt', e.record.id, 'fehler', String(err));
+	}
+}, 'households');
+
 // Ein Enddatum hat nur ein Gast. Laeuft eine Haupt-Mitgliedschaft ab, steht die
 // Person ohne Zuhause da, und das faellt erst auf, wenn sie sich beschwert.
 // Request-Hooks statt onRecordValidate: nur so kommt der Text als Feldfehler

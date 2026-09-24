@@ -6,7 +6,8 @@ Collection anlegst, die pro Haushalt getrennt sein soll.
 ## Modell
 
 `households` (`name`, `car_name` = Name des Autos) und `memberships` (`user`, `household`, `role` = `haupt`|`gast`,
-`until`). Gepflegt im Admin-UI, alle Schreib-Rules `null`. „Höchstens ein Haupthaushalt"
+`until`). Gepflegt im Admin-UI, alle Schreib-Rules `null` — Ausnahme: `car_name` ändern
+Haupt-Mitglieder selbst (`households.updateRule`, Migration `1789477200`). „Höchstens ein Haupthaushalt"
 ist der partielle Unique-Index `idx_memberships_main … WHERE role = 'haupt'`, kein Hook.
 Laufend ist eine Mitgliedschaft mit leerem oder künftigem `until`; abgelaufene Zeilen
 bleiben stehen und öffnen nichts mehr.
@@ -32,3 +33,10 @@ braucht zwei Aliase (`mine`, `theirs`). Die fertigen Bausteine stehen oben in
 * Relations auf `users`, die aus dem Request kommen (`paid_by`, `shared_with`), prüft die
   Rule nicht — dafür `pb_hooks/expenses.pb.js` als Vorbild.
 * Push nur an Mitglieder: `householdSubscriptions()` in `push-lib.js`.
+
+## Nur Haupt-Mitglieder
+
+Einstellungen eines Haushalts (`categories` schreiben, `households.car_name`) sind
+Haupt-Mitgliedern vorbehalten: `mainOf()` in `1789477200_categories.js` hängt
+`@collection.memberships:mine.role ?= "haupt"` an **denselben** Alias `mine`. Ein
+eigener Alias für die Rolle ließe einen Gast in H1 durch, der in H2 Haupt-Mitglied ist.

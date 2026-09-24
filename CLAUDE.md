@@ -99,6 +99,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── pocketbase.svelte.js  # PB-Client, authStore-Spiegel, Profil-Update
 │       │   ├── households.svelte.js  # eigene Haushalte, aktiver Haushalt, Mitglieder
 │       │   ├── items.svelte.js       # $state der Liste + Realtime
+│       │   ├── categories.svelte.js  # Kategorien des aktiven Haushalts + Realtime
 │       │   ├── gundula.svelte.js     # $state des Parkplatzes + Realtime
 │       │   ├── ideas.svelte.js       # $state des Ideen-Feeds + Realtime
 │       │   ├── expenses.svelte.js    # $state der Ausgaben + Realtime, Cent-Aufteilung
@@ -113,7 +114,9 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # Rahmen mit Nav), +page.svelte (Liste),
 │                                  # items/[id]/ (Titel + Beschreibung eines
 │                                  # Eintrags), ideen/ (Feed der
-│                                  # Erweiterungsvorschlaege), ausgaben/ (teilen,
+│                                  # Erweiterungsvorschlaege), einstellungen/
+│                                  # (Kategorien + Autoname, nur Haupt-Mitglieder),
+│                                  # ausgaben/ (teilen,
 │                                  # Salden, wer-schuldet-wem), profile/,
 │                                  # wuensche/ (Wuensch dir was: eigene Wuensche
 │                                  # sind unsichtbar, nur gezaehlt), residents/,

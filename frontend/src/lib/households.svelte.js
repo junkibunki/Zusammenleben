@@ -34,6 +34,19 @@ export function carName() {
 	return activeHousehold()?.carName || 'Auto';
 }
 
+/** Maximale Laenge von `car_name` -- muss mit Migration 1789390800 uebereinstimmen. */
+export const CAR_NAME_MAX = 40;
+
+/**
+ * Den Namen des Autos aendern; darf nur ein Haupt-Mitglied (Migration
+ * 1789477200). Lokal gleich mitgesetzt, das Realtime-Event laedt ohnehin neu.
+ */
+export async function setCarName(householdId, name) {
+	const record = await pb.collection('households').update(householdId, { car_name: name.trim() });
+	const entry = households.list.find((h) => h.id === householdId);
+	if (entry) entry.carName = record.car_name;
+}
+
 /** Genitiv eines Namens: "Gundulas", aber "Max'" -- fuer "…s Standort". */
 export function genitive(name) {
 	return /[sßxz]$/i.test(name) ? `${name}'` : `${name}s`;

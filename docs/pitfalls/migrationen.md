@@ -24,6 +24,13 @@ Buch pro Datei (Tabelle `_migrations`), nicht über einen Höchststand: `1756000
 auch dann noch an, als `1756000005` schon angewendet war (nachgemessen). Nur wenn zwei
 Migrationen dasselbe Feld anfassen, muss man die Reihenfolge selbst durchdenken.
 
+**`field.type` ist in der JS-VM eine Methode.** Symptom: eine Bedingung wie
+`if (f.type === 'select')` ist still immer falsch, danach scheitert der Start mit
+`fields: (…: Field type cannot be changed..)` oder `Duplicated or invalid field name`.
+Richtig: `f.type() === 'select'`. Den Typ eines Feldes ändert PocketBase nie — umbenennen,
+neues Feld (mit eigener `id`) daneben, per SQL umkopieren, altes entfernen
+(`1789477200`: `items.category` select → Relation).
+
 **Ein Feld ändern statt anlegen:** `fields.getByName(…)` liefert eine echte Referenz,
 keine Kopie — mutieren und `app.save(collection)` genügt (so setzt `1756000003` die
 `thumbs` des `avatar`-Feldes). Der von PocketBase selbst generierte
