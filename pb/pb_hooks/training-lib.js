@@ -51,20 +51,51 @@ function toMinutes(text) {
 	return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
 }
 
-/** "Bankdrücken, Kniebeuge und 2 weitere" -- der Inhalt der Meldung. */
-function exerciseSummary(app, userId) {
-	const exercises = app.findRecordsByFilter(
-		'training_exercises',
+/**
+ * Das Training, das als naechstes dran ist: das nach dem zuletzt eingetragenen,
+ * in der Reihenfolge der Einstellungen (Push -> Pull -> Beine -> Push). Ohne
+ * Verlauf das erste. Ist fuer `today` schon etwas eingetragen, ist es dessen
+ * Training. Dieselbe Regel wie die Vorauswahl in training.svelte.js.
+ */
+function nextWorkout(app, userId, today) {
+	const workouts = app.findRecordsByFilter(
+		'training_workouts',
 		'user = {:uid}',
 		'sort,created',
 		50,
 		0,
 		{ uid: userId }
 	);
-	const names = exercises.map((e) => e.getString('name'));
-	if (names.length === 0) return 'Zeit fürs Training.';
-	if (names.length <= 3) return names.join(', ');
-	return `${names.slice(0, 2).join(', ')} und ${names.length - 2} weitere`;
+	if (workouts.length === 0) return null;
+
+	const last = app.findRecordsByFilter('training_logs', 'user = {:uid}', '-date,-created', 1, 0, {
+		uid: userId
+	});
+	if (last.length === 0) return workouts[0];
+
+	let lastWorkout = '';
+	try {
+		lastWorkout = app
+			.findRecordById('training_exercises', last[0].getString('exercise'))
+			.getString('workout');
+	} catch {
+		// Uebung geloescht -- dann eben von vorn.
+	}
+	let idx = -1;
+	for (let i = 0; i < workouts.length; i++) {
+		if (workouts[i].id === lastWorkout) idx = i;
+	}
+	if (idx > -1 && last[0].getString('date') === today) return workouts[idx];
+	return workouts[(idx + 1) % workouts.length];
+}
+
+/** Haengt "Training" im Profil im Menue? Ausgeblendet heisst: keine Erinnerung. */
+function wantsTraining(app, userId) {
+	try {
+		return app.findRecordById('users', userId).getBool('show_training');
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -94,11 +125,14 @@ function sendDueReminders(app, now) {
 		const at = toMinutes(plan.getString('remind_at'));
 		if (at < 0 || t.minutes < at || t.minutes - at > CATCH_UP_MINUTES) continue;
 
+		const userId = plan.getString('user');
+		if (!wantsTraining(app, userId)) continue;
+
 		try {
 			plan.set('reminded_on', t.date);
 			app.save(plan);
 
-			const userId = plan.getString('user');
+			const next = nextWorkout(app, userId, t.date);
 			const subscriptions = app.findRecordsByFilter(
 				'push_subscriptions',
 				'user = {:uid}',
@@ -109,7 +143,7 @@ function sendDueReminders(app, now) {
 			);
 			sent += pushLib.broadcast(app, subscriptions, {
 				title: 'Heute ist Training',
-				body: exerciseSummary(app, userId),
+				body: next ? `Dran ist: ${next.getString('name')}` : 'Zeit fürs Training.',
 				// Ein Tag pro Tag: eine Wiederholung durch den Push-Dienst ergibt
 				// keine zweite Meldung.
 				tag: `einkauf-training-${t.date}`,

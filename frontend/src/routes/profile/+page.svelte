@@ -5,7 +5,7 @@
 	import AlertCircleIcon from '@lucide/svelte/icons/circle-alert';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import BellOffIcon from '@lucide/svelte/icons/bell-off';
-	import { auth, avatarUrl, updateProfile } from '$lib/pocketbase.svelte.js';
+	import { auth, avatarUrl, updateProfile, setShowTraining } from '$lib/pocketbase.svelte.js';
 	import { push, refreshPush, enablePush, disablePush, sendTestPush } from '$lib/push.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
@@ -13,11 +13,31 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
 	// PocketBase-Default fuer Dateifelder; der Server antwortet sonst mit 400.
 	const MAX_BYTES = 5 * 1024 * 1024;
 	// mimeTypes des `avatar`-Feldes -- alles andere lehnt PocketBase ab.
 	const ALLOWED = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/gif', 'image/webp'];
+
+	// "Training" im Menue (`users.show_training`). Sofort gespeichert; scheitert
+	// es, springt der Haken zurueck.
+	let showTraining = $state(Boolean(auth.user?.show_training));
+	let menuBusy = $state(false);
+	let menuError = $state('');
+
+	async function toggleTraining(value) {
+		menuBusy = true;
+		menuError = '';
+		try {
+			await setShowTraining(value);
+		} catch (err) {
+			showTraining = !value;
+			menuError = err?.message ?? 'Speichern fehlgeschlagen';
+		} finally {
+			menuBusy = false;
+		}
+	}
 
 	let name = $state(auth.user?.name ?? '');
 	let picked = $state(null); // gewaehltes Foto, noch nicht gespeichert
@@ -254,6 +274,36 @@
 				</Button>
 			</Card.Footer>
 		</form>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Menü</Card.Title>
+			<Card.Description>Zusätzliche Seiten, die nur in deinem Menü stehen.</Card.Description>
+		</Card.Header>
+
+		<Card.Content class="flex flex-col gap-4">
+			<div class="flex min-h-11 items-center gap-3">
+				<Checkbox
+					id="show-training"
+					bind:checked={showTraining}
+					disabled={menuBusy}
+					onCheckedChange={toggleTraining}
+				/>
+				<Label for="show-training" class="flex-1 py-3">Training anzeigen</Label>
+			</div>
+			<p class="text-muted-foreground -mt-2 text-sm">
+				Dein eigener Trainingsplan mit Erinnerung an den Trainingstagen. Ausgeschaltet kommen auch
+				keine Erinnerungen.
+			</p>
+
+			{#if menuError}
+				<Alert.Root variant="destructive">
+					<AlertCircleIcon />
+					<Alert.Description>{menuError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+		</Card.Content>
 	</Card.Root>
 
 	<Card.Root>

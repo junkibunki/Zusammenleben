@@ -25,6 +25,9 @@
 	// nach ihrem Inhalt, oben aber weiter nach der App. Das Auto heisst in jedem
 	// Haushalt anders (`households.car_name`).
 	const car = $derived(carName());
+	// "Training" steht nur drin, wer es im Profil eingeschaltet hat
+	// (`users.show_training`).
+	const showTraining = $derived(Boolean(auth.user?.show_training));
 	const LINKS = $derived([
 		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', icon: ShoppingCartIcon },
 		{ href: '/ausgaben', label: 'Ich habe bezahlt', title: 'Ausgaben', icon: EuroIcon },
@@ -36,7 +39,9 @@
 			icon: LightbulbIcon
 		},
 		{ href: '/wuensche', label: 'Wünsch dir was', title: 'Wünsch dir was', icon: GiftIcon },
-		{ href: '/training', label: 'Training', title: 'Training', icon: DumbbellIcon },
+		...(showTraining
+			? [{ href: '/training', label: 'Training', title: 'Training', icon: DumbbellIcon }]
+			: []),
 		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
 		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
 	]);
@@ -58,7 +63,11 @@
 				? 'Haushalte'
 				: page.url.pathname === '/einstellungen'
 					? 'Haushalt-Einstellungen'
-					: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
+					: page.url.pathname === '/training'
+						? 'Training'
+						: page.url.pathname === '/training/einstellungen'
+							? 'Training einrichten'
+							: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
 	);
 	const photo = $derived(avatarUrl(auth.user));
 	const label = $derived(auth.user?.name || auth.user?.email?.split('@')[0] || '');

@@ -1,11 +1,16 @@
 import { pb } from './pocketbase.svelte.js';
 
-// Trainingsplan der angemeldeten Person (Migration 1789563600). Privat: weder
-// der Haushalt noch sonst jemand sieht ihn. Daher auch keine Realtime -- es
-// schreibt niemand ausser einem selbst.
+// Trainingsplan der angemeldeten Person (Migrationen 1789563600, 1789650000).
+// Privat: weder der Haushalt noch sonst jemand sieht ihn. Daher auch keine
+// Realtime -- es schreibt niemand ausser einem selbst.
+//
+// Aufbau: mehrere Trainings (z.B. Push, Pull, Beine), jedes mit eigenen
+// Uebungen; pro Uebung und Tag ein geschafftes Gewicht. Die Trainingstage samt
+// Erinnerung gelten fuer die Person, nicht fuer ein einzelnes Training.
 
-/** Maximale Laenge eines Uebungsnamens -- muss mit der Migration uebereinstimmen. */
+/** Maximale Laengen -- muessen mit den Migrationen uebereinstimmen. */
 export const EXERCISE_MAX = 60;
+export const WORKOUT_MAX = 40;
 
 /** Wochentage in der Reihenfolge der Anzeige; `id` = Wert im Feld `days`. */
 export const WEEKDAYS = [
@@ -22,6 +27,7 @@ export const DEFAULT_REMIND_AT = '17:00';
 
 export const training = $state({
 	plan: null,
+	workouts: [],
 	exercises: [],
 	logs: [],
 	loading: true,
@@ -67,26 +73,33 @@ function bySort(a, b) {
 	return (a.sort ?? 0) - (b.sort ?? 0) || String(a.created).localeCompare(String(b.created));
 }
 
-/** Die Uebungen in der Reihenfolge des Plans (Kopie). */
-export function orderedExercises() {
-	return [...training.exercises].sort(bySort);
+/** Die Trainings in der Reihenfolge der Einstellungen (Kopie). */
+export function orderedWorkouts() {
+	return [...training.workouts].sort(bySort);
+}
+
+/** Die Uebungen eines Trainings in ihrer Reihenfolge (Kopie). */
+export function exercisesOf(workoutId) {
+	return training.exercises.filter((e) => e.workout === workoutId).sort(bySort);
 }
 
 /** Lesbare Meldung eines PocketBase-Fehlers, bevorzugt die des ersten Feldes. */
 export function trainingError(err, fallback) {
 	const data = err?.response?.data ?? {};
+	if (data.name?.code === 'validation_not_unique') return 'Diesen Namen gibt es schon.';
 	const first = Object.values(data).find((v) => v?.message);
 	return first?.message ?? err?.message ?? fallback;
 }
 
 /**
- * Laedt Plan, Uebungen und Verlauf. Aufruf aus einem $effect heraus; der
- * Rueckgabewert ist das Teardown.
+ * Laedt Plan, Trainings, Uebungen und Verlauf. Aufruf aus einem $effect heraus;
+ * der Rueckgabewert ist das Teardown.
  */
 export function syncTraining(userId) {
 	let cancelled = false;
 	if (loadedFor !== userId) {
 		training.plan = null;
+		training.workouts = [];
 		training.exercises = [];
 		training.logs = [];
 	}
@@ -96,14 +109,16 @@ export function syncTraining(userId) {
 
 	Promise.all([
 		pb.collection('training_plans').getFullList({ filter }),
+		pb.collection('training_workouts').getFullList({ filter }),
 		pb.collection('training_exercises').getFullList({ filter }),
 		// Der Verlauf waechst mit jedem Training; ein Jahr bei 3 x 6 Uebungen
 		// sind knapp 1000 Zeilen.
 		pb.collection('training_logs').getList(1, 1000, { filter, sort: '-date' })
 	])
-		.then(([plans, exercises, logs]) => {
+		.then(([plans, workouts, exercises, logs]) => {
 			if (cancelled) return;
 			training.plan = plans[0] ?? null;
+			training.workouts = workouts;
 			training.exercises = exercises;
 			training.logs = logs.items;
 			training.loading = false;
@@ -120,24 +135,101 @@ export function syncTraining(userId) {
 	};
 }
 
+function me() {
+	const record = pb.authStore.record;
+	if (!record) throw new Error('Nicht angemeldet');
+	return record;
+}
+
+function nextSort(list) {
+	return Math.max(-1, ...list.map((r) => r.sort ?? 0)) + 1;
+}
+
+/**
+ * Einen Datensatz in `ordered` um `delta` Plaetze verschieben. Nummeriert dabei
+ * alle neu, deren Platz nicht zu `sort` passt -- sonst bliebe ein Gleichstand
+ * ein Gleichstand.
+ */
+async function move(collection, ordered, record, delta) {
+	const from = ordered.findIndex((r) => r.id === record.id);
+	const to = from + delta;
+	if (from === -1 || to < 0 || to >= ordered.length) return;
+	[ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+
+	// Die Kopien aus orderedWorkouts()/exercisesOf() enthalten dieselben
+	// $state-Proxys wie die Liste; `r.sort = …` aendert also den Store.
+	const changes = ordered
+		.map((r, sort) => ({ r, sort, before: r.sort }))
+		.filter(({ r, sort }) => r.sort !== sort);
+	for (const { r, sort } of changes) r.sort = sort;
+
+	const results = await Promise.allSettled(
+		changes.map(({ r, sort }) => pb.collection(collection).update(r.id, { sort }))
+	);
+	const failed = results.findIndex((res) => res.status === 'rejected');
+	if (failed === -1) return;
+	results.forEach((res, i) => {
+		if (res.status === 'rejected') changes[i].r.sort = changes[i].before;
+	});
+	throw results[failed].reason;
+}
+
+// --- Trainingstage ----------------------------------------------------------
+
 /** Trainingstage und Uhrzeit der Erinnerung speichern. */
 export async function savePlan(days, remindAt) {
-	const me = pb.authStore.record;
-	if (!me) throw new Error('Nicht angemeldet');
 	const data = { days, remind_at: remindAt };
 	training.plan = training.plan
 		? await pb.collection('training_plans').update(training.plan.id, data)
-		: await pb.collection('training_plans').create({ ...data, user: me.id });
+		: await pb.collection('training_plans').create({ ...data, user: me().id });
 }
 
-export async function addExercise({ name, sets, reps }) {
-	const me = pb.authStore.record;
-	if (!me) throw new Error('Nicht angemeldet');
-	// Neue Uebungen stehen unten.
-	const sort = Math.max(-1, ...training.exercises.map((e) => e.sort ?? 0)) + 1;
+// --- Trainings --------------------------------------------------------------
+
+export async function addWorkout(name) {
 	const record = await pb
-		.collection('training_exercises')
-		.create({ user: me.id, name: name.trim(), sets, reps, sort });
+		.collection('training_workouts')
+		.create({ user: me().id, name: name.trim(), sort: nextSort(training.workouts) });
+	if (!training.workouts.some((w) => w.id === record.id)) training.workouts.push(record);
+	return record;
+}
+
+export async function renameWorkout(workout, name) {
+	const record = await pb.collection('training_workouts').update(workout.id, { name: name.trim() });
+	const idx = training.workouts.findIndex((w) => w.id === workout.id);
+	if (idx > -1) training.workouts[idx] = record;
+}
+
+/** Loescht das Training samt Uebungen und Verlauf (cascadeDelete). */
+export async function deleteWorkout(workout) {
+	await pb.collection('training_workouts').delete(workout.id);
+	const gone = new Set(training.exercises.filter((e) => e.workout === workout.id).map((e) => e.id));
+	for (let i = training.logs.length - 1; i >= 0; i--) {
+		if (gone.has(training.logs[i].exercise)) training.logs.splice(i, 1);
+	}
+	for (let i = training.exercises.length - 1; i >= 0; i--) {
+		if (gone.has(training.exercises[i].id)) training.exercises.splice(i, 1);
+	}
+	const idx = training.workouts.findIndex((w) => w.id === workout.id);
+	if (idx > -1) training.workouts.splice(idx, 1);
+}
+
+export function moveWorkout(workout, delta) {
+	return move('training_workouts', orderedWorkouts(), workout, delta);
+}
+
+// --- Uebungen ---------------------------------------------------------------
+
+export async function addExercise(workoutId, { name, sets, reps }) {
+	const record = await pb.collection('training_exercises').create({
+		user: me().id,
+		workout: workoutId,
+		name: name.trim(),
+		sets,
+		reps,
+		// Neue Uebungen stehen unten in ihrem Training.
+		sort: nextSort(exercisesOf(workoutId))
+	});
 	if (!training.exercises.some((e) => e.id === record.id)) training.exercises.push(record);
 }
 
@@ -159,32 +251,11 @@ export async function deleteExercise(exercise) {
 	}
 }
 
-/**
- * Eine Uebung um `delta` Plaetze verschieben. Nummeriert dabei alle neu, deren
- * Platz nicht zu `sort` passt -- sonst bliebe ein Gleichstand ein Gleichstand.
- */
-export async function moveExercise(exercise, delta) {
-	const ordered = orderedExercises();
-	const from = ordered.findIndex((e) => e.id === exercise.id);
-	const to = from + delta;
-	if (from === -1 || to < 0 || to >= ordered.length) return;
-	[ordered[from], ordered[to]] = [ordered[to], ordered[from]];
-
-	const changes = ordered
-		.map((e, sort) => ({ e, sort, before: e.sort }))
-		.filter(({ e, sort }) => e.sort !== sort);
-	for (const { e, sort } of changes) e.sort = sort;
-
-	const results = await Promise.allSettled(
-		changes.map(({ e, sort }) => pb.collection('training_exercises').update(e.id, { sort }))
-	);
-	const failed = results.findIndex((r) => r.status === 'rejected');
-	if (failed === -1) return;
-	results.forEach((r, i) => {
-		if (r.status === 'rejected') changes[i].e.sort = changes[i].before;
-	});
-	throw results[failed].reason;
+export function moveExercise(exercise, delta) {
+	return move('training_exercises', exercisesOf(exercise.workout), exercise, delta);
 }
+
+// --- Verlauf ----------------------------------------------------------------
 
 /** Der Eintrag einer Uebung an einem Tag (oder undefined). */
 export function logFor(exerciseId, date) {
@@ -202,13 +273,36 @@ export function previousLog(exerciseId, date) {
 }
 
 /**
+ * Welches Training an `date` vorausgewaehlt ist:
+ * 1. steht fuer den Tag schon etwas drin, das Training dieser Eintraege;
+ * 2. sonst das nach dem zuletzt davor gemachten (Push -> Pull -> Beine -> Push);
+ * 3. sonst das erste.
+ * Dieselbe Reihum-Regel nennt die Erinnerung (pb_hooks/training-lib.js).
+ */
+export function suggestedWorkout(date) {
+	const workouts = orderedWorkouts();
+	if (workouts.length === 0) return null;
+	const workoutOf = Object.fromEntries(training.exercises.map((e) => [e.id, e.workout]));
+
+	let before;
+	for (const l of training.logs) {
+		const w = workoutOf[l.exercise];
+		if (!w) continue;
+		if (l.date === date) return workouts.find((x) => x.id === w) ?? workouts[0];
+		if (l.date < date && (!before || l.date > before.date)) before = { date: l.date, w };
+	}
+	if (!before) return workouts[0];
+	const idx = workouts.findIndex((x) => x.id === before.w);
+	return workouts[(idx + 1) % workouts.length];
+}
+
+/**
  * Die Gewichte eines Trainingstags speichern. `weights` bildet Uebungs-ID auf
  * Kilogramm ab; null heisst "nicht gemacht" und loescht einen vorhandenen
  * Eintrag. Unveraenderte Werte gehen gar nicht erst raus.
  */
 export async function saveDay(date, weights) {
-	const me = pb.authStore.record;
-	if (!me) throw new Error('Nicht angemeldet');
+	const user = me().id;
 
 	const jobs = Object.entries(weights).map(async ([exercise, weight]) => {
 		const existing = logFor(exercise, date);
@@ -223,9 +317,7 @@ export async function saveDay(date, weights) {
 			const idx = training.logs.findIndex((l) => l.id === existing.id);
 			if (idx > -1) training.logs[idx] = record;
 		} else {
-			const record = await pb
-				.collection('training_logs')
-				.create({ user: me.id, exercise, date, weight });
+			const record = await pb.collection('training_logs').create({ user, exercise, date, weight });
 			if (!training.logs.some((l) => l.id === record.id)) training.logs.push(record);
 		}
 	});

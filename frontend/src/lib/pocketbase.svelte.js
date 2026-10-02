@@ -65,3 +65,11 @@ export async function updateProfile({ name, avatar } = {}) {
 	pb.authStore.save(pb.authStore.token, record);
 	return record;
 }
+
+/** Ob "Training" im Menue steht (`users.show_training`, Migration 1789650001). */
+export async function setShowTraining(value) {
+	const me = pb.authStore.record;
+	if (!me) throw new Error('Nicht angemeldet');
+	const record = await pb.collection('users').update(me.id, { show_training: Boolean(value) });
+	pb.authStore.save(pb.authStore.token, record);
+}

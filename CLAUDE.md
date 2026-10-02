@@ -121,7 +121,9 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # Salden, wer-schuldet-wem), profile/,
 │                                  # wuensche/ (Wuensch dir was: eigene Wuensche
 │                                  # sind unsichtbar, nur gezaehlt), training/
-│                                  # (Plan + Gewichte, privat pro Person), residents/,
+│                                  # (Gewichte eintragen; einstellungen/ = Trainings,
+│                                  # Uebungen, Tage; privat, im Menue nur mit
+│                                  # users.show_training), residents/,
 │                                  # login/
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ noetig (getestet: 0.40.2)
