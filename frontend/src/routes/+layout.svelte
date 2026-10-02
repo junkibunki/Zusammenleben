@@ -13,8 +13,9 @@
 	const onLogin = $derived(page.url.pathname === '/login');
 
 	// Seiten, die ohne Haushalt auskommen: der Ideen-Feed ist app-weit, und das
-	// Profil braucht man auch dann, wenn noch niemand einen zugeordnet hat.
-	const OPEN_PATHS = ['/ideen', '/profile'];
+	// Profil braucht man auch dann, wenn noch niemand einen zugeordnet hat. Der
+	// Trainingsplan gehoert einer Person, nicht einem Haushalt.
+	const OPEN_PATHS = ['/ideen', '/profile', '/training'];
 	const needsHousehold = $derived(!OPEN_PATHS.includes(page.url.pathname));
 
 	// Nur die ID, nicht `auth.user`: der Record wird bei jedem Profil-Update neu

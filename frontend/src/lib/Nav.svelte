@@ -6,6 +6,7 @@
 	import LightbulbIcon from '@lucide/svelte/icons/lightbulb';
 	import EuroIcon from '@lucide/svelte/icons/euro';
 	import GiftIcon from '@lucide/svelte/icons/gift';
+	import DumbbellIcon from '@lucide/svelte/icons/dumbbell';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
@@ -35,6 +36,7 @@
 			icon: LightbulbIcon
 		},
 		{ href: '/wuensche', label: 'Wünsch dir was', title: 'Wünsch dir was', icon: GiftIcon },
+		{ href: '/training', label: 'Training', title: 'Training', icon: DumbbellIcon },
 		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
 		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
 	]);

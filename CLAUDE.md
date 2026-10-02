@@ -105,6 +105,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── expenses.svelte.js    # $state der Ausgaben + Realtime, Cent-Aufteilung
 │       │   ├── wishes.svelte.js      # $state der Wuensche der *anderen* + eigener Zaehler
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
+│       │   ├── training.svelte.js    # privater Trainingsplan: Tage, Uebungen, Gewichte
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
 │       │   ├── components/ui/        # shadcn-svelte, CLI-Output (nicht haendisch pflegen)
@@ -119,14 +120,16 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # ausgaben/ (teilen,
 │                                  # Salden, wer-schuldet-wem), profile/,
 │                                  # wuensche/ (Wuensch dir was: eigene Wuensche
-│                                  # sind unsichtbar, nur gezaehlt), residents/,
+│                                  # sind unsichtbar, nur gezaehlt), training/
+│                                  # (Plan + Gewichte, privat pro Person), residents/,
 │                                  # login/
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ noetig (getestet: 0.40.2)
 │   ├── pb_migrations/             # JS-Migrationen, laufen beim Start automatisch
 │   ├── pb_hooks/                  # push.pb.js (Hook-Anmeldungen), push-lib.js
 │   │                              # (Schluessel/Empfaenger/Versand), wishes.pb.js
-│   │                              # (Doppelte-Pruefung + Zaehler-Route), webpush.js
+│   │                              # (Doppelte-Pruefung + Zaehler-Route), training.pb.js
+│   │                              # + training-lib.js (Cron-Erinnerung), webpush.js
 │   │                              # GENERIERT
 │   ├── pb_data/                   # gitignored, die SQLite-DB
 │   └── pb_public/                 # gitignored, Build-Output
