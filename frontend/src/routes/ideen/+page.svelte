@@ -1,5 +1,6 @@
 <script>
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import HeartIcon from '@lucide/svelte/icons/heart';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
@@ -9,6 +10,10 @@
 		syncIdeas,
 		addIdea,
 		setIdeaStatus,
+		toggleLike,
+		likeCount,
+		likedBy,
+		sortIdeas,
 		isResolved,
 		IDEA_MAX
 	} from '$lib/ideas.svelte.js';
@@ -31,6 +36,11 @@
 		if (!auth.valid) return;
 		return syncIdeas();
 	});
+
+	const me = $derived(auth.user?.id ?? '');
+
+	// Offene zuerst (nach Likes, dann neuste), danach die abgehakten.
+	const sorted = $derived(sortIdeas(ideas.items));
 
 	const valid = $derived(draft.trim().length > 0 && draft.length <= IDEA_MAX);
 
@@ -142,13 +152,15 @@
 			Noch keine Ideen. Fang an. 💡
 		</p>
 	{:else}
-		<!-- Neuste zuerst; die Reihenfolge kommt aus dem Store (sort '-created'). -->
 		<ul class="bg-card divide-y overflow-hidden rounded-lg border">
-			{#each ideas.items as idea (idea.id)}
+			{#each sorted as idea (idea.id)}
 				{@const photo = avatarUrl(idea.expand?.author)}
 				{@const author = userLabel(idea.expand?.author)}
 				{@const resolved = isResolved(idea)}
 				{@const resolvedMeta = resolvedMetaFor(idea)}
+				{@const likes = likeCount(idea)}
+				{@const liked = likedBy(idea, me)}
+				{@const own = Boolean(me) && idea.author === me}
 				<li class="flex items-start gap-3 py-3 pr-1 pl-3" class:opacity-60={resolved}>
 					<Avatar.Root class="mt-0.5 shrink-0">
 						{#if photo}
@@ -173,6 +185,34 @@
 							<span class="text-muted-foreground block truncate text-xs">{resolvedMeta}</span>
 						{/if}
 					</div>
+
+					{#if resolved || own}
+						<!-- Abgehakt wird nicht mehr priorisiert, die eigene Idee zaehlt nicht:
+						     nur die Anzahl, kein Knopf. -->
+						{#if likes > 0}
+							<span
+								class="text-muted-foreground flex h-11 shrink-0 items-center gap-1 px-2 text-xs tabular-nums"
+								aria-label={`${likes} ${likes === 1 ? 'Like' : 'Likes'}`}
+							>
+								<HeartIcon class="size-4" />
+								{likes}
+							</span>
+						{/if}
+					{:else}
+						<Button
+							variant="ghost"
+							class={[
+								'h-11 shrink-0 gap-1 px-2 tabular-nums',
+								liked ? 'text-primary' : 'text-muted-foreground'
+							]}
+							aria-pressed={liked}
+							aria-label={`„${shortText(idea)}“ ${liked ? 'nicht mehr liken' : 'liken'}, ${likes} ${likes === 1 ? 'Like' : 'Likes'}`}
+							onclick={() => toggleLike(idea)}
+						>
+							<HeartIcon class={['size-4', liked && 'fill-current']} />
+							{#if likes > 0}{likes}{/if}
+						</Button>
+					{/if}
 
 					{#if resolved}
 						<Button

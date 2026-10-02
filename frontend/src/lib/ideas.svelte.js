@@ -17,6 +17,35 @@ export function isResolved(idea) {
 	return Boolean(idea?.status);
 }
 
+/** Wie viele die Idee geliked haben. */
+export function likeCount(idea) {
+	return idea?.likes?.length ?? 0;
+}
+
+/** Hat `userId` die Idee geliked? */
+export function likedBy(idea, userId) {
+	return Boolean(userId) && (idea?.likes ?? []).includes(userId);
+}
+
+/**
+ * Reihenfolge des Feeds: erst die offenen Ideen, die mit den meisten Likes
+ * oben, bei Gleichstand die neuste zuerst; danach alle abgehakten, neuste
+ * zuerst. Liefert eine Kopie -- `ideas.items` selbst bleibt unsortiert, damit
+ * Realtime weiter einzelne Eintraege ersetzen kann.
+ */
+export function sortIdeas(items) {
+	return [...items].sort((a, b) => {
+		const resolved = Number(isResolved(a)) - Number(isResolved(b));
+		if (resolved) return resolved;
+		if (!isResolved(a)) {
+			const likes = likeCount(b) - likeCount(a);
+			if (likes) return likes;
+		}
+		// ISO-Zeitstempel sortieren als String richtig.
+		return (b.created ?? '').localeCompare(a.created ?? '');
+	});
+}
+
 export const ideas = $state({
 	items: [],
 	loading: true,
@@ -101,6 +130,33 @@ export async function addIdea(text) {
 	if (!ideas.items.some((i) => i.id === record.id)) ideas.items.unshift(record);
 
 	return record;
+}
+
+/**
+ * Like setzen oder zuruecknehmen. Optimistisch, mit Rollback bei einem Fehler.
+ *
+ * Geschickt wird nur der Modifier (`likes+` / `likes-`), nie die ganze Liste:
+ * der Server rechnet ihn auf den aktuellen Stand, ein gleichzeitiger Like von
+ * jemand anderem geht so nicht verloren. Die eigene Idee liken laesst der Hook
+ * (pb_hooks/ideas.pb.js) nicht zu, die Seite zeigt dafuer keinen Knopf.
+ */
+export async function toggleLike(idea) {
+	const me = pb.authStore.record?.id;
+	if (!me || idea.author === me) return;
+
+	const before = idea.likes ?? [];
+	const liked = before.includes(me);
+	idea.likes = liked ? before.filter((id) => id !== me) : [...before, me];
+
+	try {
+		const record = await pb
+			.collection(COLLECTION)
+			.update(idea.id, { [liked ? 'likes-' : 'likes+']: me }, { expand: EXPAND });
+		idea.likes = record.likes;
+	} catch (err) {
+		idea.likes = before;
+		ideas.error = err?.message ?? 'Speichern fehlgeschlagen';
+	}
 }
 
 /**
