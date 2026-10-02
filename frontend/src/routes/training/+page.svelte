@@ -24,6 +24,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 
 	// Nur das Eintragen; Trainings, Uebungen und Trainingstage stehen unter
 	// /training/einstellungen.
@@ -163,28 +164,28 @@
 						Training einrichten
 					</Button>
 				{:else}
-					{#if workouts.length > 1}
-						<div class="grid gap-2">
-							<span class="text-sm font-medium" id="workout-label">Training</span>
-							<div class="flex flex-wrap gap-2" role="group" aria-labelledby="workout-label">
+					<div class="grid gap-2">
+						<Label for="training-workout">Training</Label>
+						<!-- Kein bind:value: das Select laesst sich abwaehlen (""), angezeigt
+						     und benutzt wird immer `workout` (docs/pitfalls/designsystem.md). -->
+						<Select.Root
+							type="single"
+							value={workout?.id ?? ''}
+							onValueChange={(v) => v && pickWorkout(v)}
+						>
+							<Select.Trigger
+								id="training-workout"
+								class="h-11 w-full data-[size=default]:h-11"
+							>
+								<span class="truncate">{workout?.name ?? ''}</span>
+							</Select.Trigger>
+							<Select.Content>
 								{#each workouts as w (w.id)}
-									{@const on = w.id === workout?.id}
-									<Button
-										type="button"
-										variant={on ? 'default' : 'outline'}
-										size="lg"
-										class="h-11"
-										aria-pressed={on}
-										onclick={() => pickWorkout(w.id)}
-									>
-										{w.name}
-									</Button>
+									<Select.Item value={w.id} label={w.name}>{w.name}</Select.Item>
 								{/each}
-							</div>
-						</div>
-					{:else}
-						<p class="text-sm font-medium">{workout?.name}</p>
-					{/if}
+							</Select.Content>
+						</Select.Root>
+					</div>
 
 					{#if exercises.length === 0}
 						<p class="text-muted-foreground text-sm">
