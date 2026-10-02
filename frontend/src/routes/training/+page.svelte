@@ -199,10 +199,18 @@
 								<li class="flex items-center gap-3 px-3 py-2">
 									<div class="min-w-0 flex-1">
 										<p class="truncate text-sm font-medium">{ex.name}</p>
-										<p class="text-muted-foreground text-xs">
-											{ex.sets} × {ex.reps}
+										<p class="text-muted-foreground text-xs">{ex.sets} × {ex.reps} Wdh.</p>
+										<!-- Das Gewicht vom letzten Mal ist der Grund, warum man hier
+										     nachsieht -- deshalb eigene Zeile und nicht nur Platzhalter. -->
+										<p class="text-muted-foreground mt-0.5 text-sm">
 											{#if prev}
-												· zuletzt {formatWeight(prev.weight)} ({formatDate(prev.date)})
+												Letztes Mal:
+												<span class="text-foreground font-semibold tabular-nums">
+													{formatWeight(prev.weight)}
+												</span>
+												<span class="text-xs">· {formatDate(prev.date)}</span>
+											{:else}
+												<span class="text-xs">Noch kein Gewicht eingetragen</span>
 											{/if}
 										</p>
 									</div>
