@@ -1,23 +1,50 @@
 # Einkaufsliste
 
-Gemeinsame Einkaufsliste als leichtgewichtige PWA.
+Gemeinsame Einkaufsliste als leichtgewichtige PWA – inzwischen mit allem, was ein
+Haushalt sonst noch teilt.
 Ein einziger Prozess (PocketBase) liefert API **und** Frontend auf demselben Port.
+
+## Was die App kann
+
+| Seite | Inhalt |
+| ----- | ------ |
+| **Liste** (`/`) | Einträge nach Kategorie („Wo einkaufen?“) gruppiert, abhaken, löschen, Kategorien einzeln einklappen. Jede Zeile zeigt, wer sie wann angelegt und wer gekauft hat. Die Detailseite (`/items/[id]`) bearbeitet Titel und Beschreibung (`note`). |
+| **Wo ist …** (`/gundula`) | Wo das Auto des Haushalts steht: „hier parken“ speichert den aktuellen Standort, die Karte (Leaflet + OpenStreetMap) zeigt ihn. Der Name des Autos kommt aus `households.car_name`. |
+| **Ausgaben** (`/ausgaben`) | Beträge auf ausgewählte Bewohner aufteilen (auf den Cent), auch Erstattungen als negative Beträge. Salden, wer wem was schuldet, Begleichen per Tipp. |
+| **Wünsch dir was** (`/wuensche`) | Geschenkewünsche. Die eigenen sieht man nach dem Speichern nie wieder – nur einen Zähler. |
+| **Ideen** (`/ideen`) | App-weiter Feed mit Erweiterungsvorschlägen; abhaken als „umgesetzt“ oder „abgelehnt“, liken (nicht die eigene Idee). Offene Ideen sortiert nach Likes. |
+| **Training** (`/training`) | Privater Trainingsplan: mehrere Trainings mit Übungen, Gewichte eintragen, das Gewicht vom letzten Mal daneben, Push-Erinnerung an gewählten Wochentagen. Steht nur im Menü, wenn im Profil „Training anzeigen“ an ist. |
+| **Einstellungen** (`/einstellungen`) | Kategorien des Haushalts anlegen, umbenennen, sortieren, löschen; Name des Autos. Nur für Haupt-Mitglieder. |
+| **Bewohner** (`/residents`) | Wer im aktiven Haushalt einen Account hat. |
+| **Haushalte** (`/haushalte`) | Wechsel des aktiven Haushalts, wenn man in mehreren Mitglied ist. |
+| **Profil** (`/profile`) | Foto und Name ändern, Benachrichtigungen pro Gerät, Training ein-/ausblenden. |
+
+Dazu ein Osterei: fünf Tipps aufs Profilbild (oder mit 5 % Glück einfach so) schicken einen
+Pixeldrachen durchs Bild.
 
 ```
 /
-├── frontend/          # SvelteKit (Svelte 5 Runes, SPA)
-├── pb/                # PocketBase-Binary, pb_data/, pb_public/, pb_migrations/
-├── build.sh           # baut frontend -> pb/pb_public
+├── frontend/                  # SvelteKit (Svelte 5 Runes, SPA)
+├── pb/
+│   ├── pb_migrations/         # Schema + API-Rules, laufen beim Start automatisch
+│   ├── pb_hooks/              # serverseitige Logik (Push, Prüfungen, Cron)
+│   ├── pb_data/               # gitignored, die SQLite-DB
+│   └── pb_public/             # gitignored, Build-Output
+├── docs/pitfalls/             # Stolpersteine nach Thema
+├── .github/workflows/         # deploy.yml: Build + Deploy auf den VPS
+├── build.sh                   # baut frontend -> pb/pb_public
 └── README.md
 ```
 
 ## Stack
 
-| Teil     | Technik                                                      |
-| -------- | ------------------------------------------------------------ |
-| Backend  | PocketBase (Go-Binary, SQLite) – kein eigener Backend-Code    |
-| Frontend | SvelteKit + Svelte 5 Runes, `@sveltejs/adapter-static` (SPA)  |
-| Styling  | handgeschriebenes CSS, mobile-first, Touch-Ziele 44px         |
+| Teil     | Technik                                                                 |
+| -------- | ----------------------------------------------------------------------- |
+| Backend  | PocketBase (Go-Binary, SQLite) plus JS-Hooks in `pb/pb_hooks/`           |
+| Frontend | SvelteKit + Svelte 5 Runes, `@sveltejs/adapter-static` (SPA)             |
+| Styling  | Tailwind CSS v4 + shadcn-svelte, mobile-first, Touch-Ziele 44px          |
+| Karte    | Leaflet mit OpenStreetMap-Kacheln                                        |
+| Push     | Web Push (RFC 8291/8292) direkt aus PocketBase, ohne externen Dienst     |
 
 ---
 
@@ -56,6 +83,9 @@ in `memberships` je Person und Haushalt eine Zeile:
 * `role = gast` – beliebig viele, `until` optional: ab diesem Zeitpunkt ist der Haushalt
   für den Gast gesperrt. Leer heißt: bis die Zeile gelöscht wird.
 
+Den Standort-Record für „Wo ist …“ legt ein Hook beim Anlegen des Haushalts selbst an.
+Kategorien legen Haupt-Mitglieder danach in der App unter *Einstellungen* an.
+
 Wer keine laufende Mitgliedschaft hat, sieht in der App nur einen Hinweis (plus Ideen und
 Profil). Wer in mehreren Haushalten ist, wechselt über den Knopf unten im Menü. Beim Update auf diese Version
 legt die Migration `1789304400` den Haushalt „Zuhause“ an, hängt alle Bestandsdaten
@@ -91,51 +121,48 @@ Danach ist alles unter `http://127.0.0.1:8090/` erreichbar – Frontend und API.
 
 ## Datenmodell
 
-Collection `items` (Migration `pb/pb_migrations/1756000000_created_items.js`):
+Das Schema steht vollständig in `pb/pb_migrations/`; jede Migration erklärt im Kopf,
+warum sie so aussieht. Überblick:
 
-| Feld                  | Typ              | Hinweis                                                        |
-| --------------------- | ---------------- | -------------------------------------------------------------- |
-| `name`                | text             | required                                                       |
-| `quantity`            | text             | optional, Freitext ("2 Packungen")                             |
-| `category`            | relation → categories | optional; Kategorien pro Haushalt (Migration `1789477200`) |
-| `done`                | bool             | nicht gesetzt = false                                          |
-| `note`                | text             | optional                                                       |
-| `added_by`            | relation → users |                                                                |
-| `done_by`             | relation → users | optional                                                       |
-| `created` / `updated` | autodate         | PocketBase-Automatik                                           |
+| Collection | Inhalt | Wer darf |
+| ---------- | ------ | -------- |
+| `users` | Accounts mit `name`, `avatar`, `show_training` | Selbstregistrierung aus (`createRule = null`); sichtbar sind man selbst und Mitbewohner |
+| `households` | `name`, `car_name` | nur Superuser schreibt |
+| `memberships` | `user`, `household`, `role` (`haupt`/`gast`), `until` | nur Superuser schreibt |
+| `items` | Einkaufszettel: `name`, `quantity`, `note`, `category`, `done`, `added_by`, `done_by` | laufende Mitglieder des Haushalts |
+| `categories` | „Wo einkaufen?“ pro Haushalt, `name`, `sort` | lesen: Mitglieder; ändern: Haupt-Mitglieder |
+| `car_location` | ein Record pro Haushalt: `lat`, `lng`, `parked_at`, `parked_by` | Mitglieder ändern; anlegen/löschen nur Server |
+| `expenses` | `title`, `amount_cents` (≠ 0, negativ = Erstattung), `paid_by`, `shared_with` | Mitglieder; Hook prüft, dass Zahler und Teilnehmer zum Haushalt gehören |
+| `wishes` | `text`, `wisher` | Mitglieder, aber **nie** der Wünschende selbst |
+| `ideas` | `text`, `status`, `likes`, `author` | alle Eingeloggten, app-weit; löschen nur Superuser |
+| `training_*` | `plans`, `workouts`, `exercises`, `logs` | nur die eigene Person |
+| `push_subscriptions` | ein Datensatz je Gerät | nur die eigene Person |
+| `push_config` | Record `vapid` mit dem Schlüsselpaar des Servers | nur Superuser |
 
-API-Rules für List/View/Create/Update/Delete jeweils `@request.auth.id != ""`.
-Bewusst grob – innerhalb eines Haushalts braucht es keine feingranularen Rechte.
-
-`users.createRule` wird per zweiter Migration auf `null` gesetzt: niemand kann sich
-selbst registrieren, Accounts legt der Admin an.
-
-`users.viewRule`/`listRule` lassen seit Migration `1789304400` nur Mitbewohner durch
-(wer in einem Haushalt steht, in dem man selbst laufend Mitglied ist), beim Einzelabruf
-zusätzlich Autoren im app-weiten Ideen-Feed. Ohne ViewRule liefert
-`expand=added_by,done_by` leere Objekte – PocketBase prüft beim Expand die ViewRule der
-Zielcollection. Ändern bleibt auf den eigenen Account beschränkt.
+Alles außer Ideen, Training und Push hängt über ein Pflichtfeld `household` an einem
+Haushalt, und jede Rule verlangt eine *laufende* Mitgliedschaft genau dort
+(Migration `1789304400`, Fallstricke in [docs/pitfalls/mandanten.md](docs/pitfalls/mandanten.md)).
 
 **Beim Anlegen eines Accounts das Feld `name` ausfüllen.** Es ist das einzige Feld, das
 für die anderen Nutzer sichtbar ist – `email` liefert PocketBase nur bei
 gesetztem `emailVisibility` bzw. für den eigenen Account aus. Ohne Namen steht in der
 Zeile „Jemand“.
 
-Jede Zeile zeigt darunter klein und ausgegraut, wer den Eintrag wann hinzugefügt hat
-(`added_by` + `created`); bei erledigten Einträgen zusätzlich „gekauft von …“
-(`done_by`). Das Datum ist am selben Tag „heute 19:41“, sonst „3. Sept. 19:41“.
+Die `users`-ViewRule lässt Mitbewohner durch (auch ehemalige Gäste, damit ihr Name in alten
+Ausgaben stehen bleibt), beim Einzelabruf zusätzlich Autoren im Ideen-Feed. Ohne sie
+liefert `expand=added_by,done_by` leere Objekte – PocketBase prüft beim Expand die
+ViewRule der Zielcollection.
 
-Für die Benachrichtigungen kommen zwei weitere Collections dazu (Migration
-`1756000010_push_subscriptions.js`):
+Was in `pb/pb_hooks/` liegt:
 
-| Collection            | Zweck                                                                     |
-| --------------------- | ------------------------------------------------------------------------- |
-| `push_subscriptions`  | Ein Datensatz je Gerät: `endpoint` (unique), `p256dh`, `auth`, `device`    |
-| `push_config`         | Ein Record `vapid` mit dem Schlüsselpaar des Servers, selbst erzeugt       |
-
-`push_subscriptions` ist auf `user = @request.auth.id` beschränkt – jeder sieht und
-verwaltet nur die eigenen Geräte. `push_config` hat gar keine Rules und ist damit nur
-für den Admin sichtbar.
+| Datei | Aufgabe |
+| ----- | ------- |
+| `push.pb.js`, `push-lib.js`, `webpush.js` | VAPID-Schlüssel, `/api/push/key`, `/api/push/test`, Push bei neuem Eintrag und neuer Ausgabe |
+| `households.pb.js` | Standort-Record für jeden neuen Haushalt, Prüfung der Mitgliedschaften |
+| `expenses.pb.js` | Zahler und Teilnehmer müssen zum Haushalt gehören |
+| `wishes.pb.js` | Doppelte Wünsche abfangen, Zähler-Route für die eigenen |
+| `ideas.pb.js` | Likes: nur sich selbst, nicht die eigene Idee; `author` steht fest |
+| `training.pb.js`, `training-lib.js` | Cron jede Minute: Trainingserinnerung nach deutscher Zeit |
 
 ---
 
@@ -218,8 +245,8 @@ Dann muss `/var/www/mein-projekt` diesem User gehören.
 ### Automatisches Deployment per GitHub Actions
 
 `.github/workflows/deploy.yml` baut bei jedem Push auf `main` das Frontend und lädt
-`pb_public/` und `pb_migrations/` auf den Server. Der manuelle `rsync` oben wird danach
-nicht mehr gebraucht.
+`pb_public/`, `pb_hooks/` und `pb_migrations/` auf den Server. Der manuelle `rsync` oben
+wird danach nicht mehr gebraucht.
 
 Einmalig einzurichten:
 
@@ -287,8 +314,8 @@ Einmalig einzurichten:
 | `SSH_PASSPHRASE` | nur falls der Key eine hat, sonst leer lassen                 |
 
 Was der Workflow tut: `.deploy/` auf dem Server leeren, dorthin hochladen, prüfen dass
-beide Ordner vollständig angekommen sind, Dienst stoppen, `pb_data/` nach
-`pb_data.bak/` sichern, `pb_public/` durch die neue Version ersetzen und
+alle drei Ordner vollständig angekommen sind, Dienst stoppen, `pb_data/` nach
+`pb_data.bak/` sichern, `pb_public/` und `pb_hooks/` durch die neue Version ersetzen und
 `pb_migrations/` ergänzen, Dienst starten, `/api/health` pollen. Erst der letzte Schritt
 fasst den laufenden Stand an – scheitert der Upload, läuft die App unverändert weiter.
 
@@ -337,7 +364,10 @@ Schema-Änderungen also besser eine eigene Kopie wegschreiben.
    Befehl wiederholen, wieder starten. Danach unter
    `https://einkauf.MEINEDOMAIN.de/_/` anmelden.
 2. In der Collection `users` die Accounts anlegen (E-Mail + Passwort + **Name**).
-3. App unter `https://einkauf.MEINEDOMAIN.de/` öffnen und auf dem Homescreen installieren.
+3. Haushalt und Mitgliedschaften anlegen bzw. prüfen (siehe „Haushalte“ unter *Lokal
+   entwickeln*). Auf einer frischen Datenbank legt die Migration schon „Zuhause“ an –
+   ohne Zeile in `memberships` sieht dort aber niemand etwas.
+4. App unter `https://einkauf.MEINEDOMAIN.de/` öffnen und auf dem Homescreen installieren.
 
 ---
 
@@ -402,9 +432,16 @@ korrekt ausgeliefert.
 
 ## Benachrichtigungen
 
-Schreibt jemand etwas auf den Zettel, bekommen **alle anderen** eine Push-Meldung –
-auch wenn die App geschlossen ist. Der Text ist z.B. „Neu: Möhren · 2 Bund“ mit
-„Supermarkt · von Anna“ darunter; ein Tippen darauf öffnet die Liste.
+Push-Meldungen kommen auch bei geschlossener App, in drei Fällen:
+
+* **Neuer Eintrag auf dem Zettel** – an alle anderen im Haushalt, z.B. „Neu: Möhren ·
+  2 Bund“ mit „Supermarkt · von Anna“ darunter; ein Tippen darauf öffnet die Liste.
+* **Neue Ausgabe oder Erstattung** – an alle anderen im Haushalt, damit niemand dieselbe
+  Rechnung zweimal einträgt.
+* **Trainingserinnerung** – an die Person selbst, an den Wochentagen und zur Uhrzeit aus
+  dem eigenen Plan. Nur solange im Profil „Training anzeigen“ an ist.
+
+Wer etwas anlegt, bekommt dazu selbst keine Meldung.
 
 Einschalten muss das **jedes Gerät für sich**, unter *Profil → Benachrichtigungen*.
 Dort steht auch ein Knopf **„Probe senden“**, der eine Testmeldung an die eigenen
@@ -438,25 +475,41 @@ Testvektor aus dem RFC.
 ```
 frontend/src/
 ├── app.html                   # PWA-Metas: manifest, apple-touch-icon, viewport-fit
-├── app.css                    # globales CSS, mobile-first
+├── app.css                    # Tailwind-Entry, Design-Tokens hell/dunkel
 ├── service-worker.js          # Pass-through-fetch + push / notificationclick
 ├── lib/
-│   ├── pocketbase.svelte.js   # PB-Client + reaktiver authStore-Spiegel
-│   ├── items.svelte.js        # $state der Liste + Realtime-Subscription
-│   └── push.svelte.js         # Benachrichtigungen an-/abmelden
+│   ├── pocketbase.svelte.js   # PB-Client, reaktiver authStore-Spiegel, Profil
+│   ├── households.svelte.js   # eigene Haushalte, aktiver Haushalt, Mitglieder
+│   ├── items.svelte.js        # Liste + Realtime
+│   ├── categories.svelte.js   # Kategorien des aktiven Haushalts + Realtime
+│   ├── gundula.svelte.js      # Standort des Autos + Realtime
+│   ├── expenses.svelte.js     # Ausgaben + Realtime, Cent-Aufteilung
+│   ├── wishes.svelte.js       # Wünsche der anderen + eigener Zähler
+│   ├── ideas.svelte.js        # Ideen-Feed + Realtime
+│   ├── training.svelte.js     # Trainings, Übungen, Gewichte
+│   ├── push.svelte.js         # Benachrichtigungen an-/abmelden
+│   ├── easteregg.svelte.js    # Osterei
+│   ├── components/ui/         # shadcn-svelte (CLI-Output, nicht von Hand pflegen)
+│   ├── Dragon.svelte          # Pixeldrache
+│   └── Nav.svelte             # Topbar + Burgermenü
 └── routes/
     ├── +layout.js             # ssr = false, prerender = false
-    ├── +layout.svelte         # Auth-Guard / Redirects
-    ├── +page.svelte           # Liste, Hinzufügen, Abhaken, Löschen
-    └── login/+page.svelte     # E-Mail + Passwort
+    ├── +layout.svelte         # Auth-Guard / Redirects, Rahmen mit Nav
+    ├── +page.svelte           # Liste
+    ├── items/[id]/            # Detailseite eines Eintrags
+    ├── gundula/  ausgaben/  wuensche/  ideen/  residents/  haushalte/
+    ├── training/              # Gewichte eintragen; einstellungen/ = Plan
+    ├── einstellungen/         # Kategorien + Autoname (Haupt-Mitglieder)
+    ├── profile/
+    └── login/
 ```
 
 ### Realtime
 
-`items.svelte.js` hält den State und verwaltet die Subscription. Wichtig: es werden
-**immer nur einzelne Items** mutiert (`push` / `splice` / `items[i] = …`), nie die
-Liste als Ganzes ersetzt. Dadurch kollidieren gleichzeitige Änderungen zweier
-Personen nicht.
+Jeder Store (`items`, `categories`, `expenses`, …) hält seinen State und verwaltet die
+Subscription. Wichtig: es werden **immer nur einzelne Records** mutiert (`push` /
+`splice` / `items[i] = …`), nie die Liste als Ganzes ersetzt. Dadurch kollidieren
+gleichzeitige Änderungen zweier Personen nicht.
 
 Abhaken und Löschen sind optimistisch: erst lokal, dann Server. Schlägt der Request
 fehl, wird der vorherige Zustand zurückgerollt.
@@ -465,10 +518,11 @@ fehl, wird der vorherige Zustand zurückgerollt.
 
 ## Was getestet wurde
 
-End-to-End gegen PocketBase 0.40.2, Frontend aus `pb/pb_public` vom selben Prozess serviert:
+Stand der ersten Version, end-to-end gegen PocketBase 0.40.2, Frontend aus
+`pb/pb_public` vom selben Prozess serviert (die API-Rules sind seitdem pro Haushalt
+eingeschränkt, die Kategorien eine eigene Collection):
 
-* Migrationen laufen beim Start durch; `items` hat alle Felder inkl. `select`-Werte
-  mit Umlauten, alle fünf Rules stehen auf `@request.auth.id != ""`.
+* Migrationen laufen beim Start durch; `items` hat alle Felder.
 * `users.createRule` ist `null`, Selbstregistrierung liefert `403`.
 * Login, Redirect `/` → `/login` und zurück, Session übersteht einen Reload.
 * Hinzufügen per Enter, Gruppierung nach Kategorie, Abhaken per Tap
@@ -533,9 +587,9 @@ Wo zwei Wege möglich waren, wurde der einfachere genommen:
 * **Erledigte Items sind standardmäßig eingeklappt** (Kopfzeile mit Anzahl zum
   Aufklappen) statt dauerhaft sichtbar-ausgegraut – hält die Liste auf dem Handy kurz.
 
-* **`quantity` und `note` sind im Schema angelegt und werden in der Liste angezeigt,
-  haben aber noch kein Eingabefeld.** Die erste Version hat bewusst nur das eine Feld
-  ganz oben; die Felder existieren jetzt schon, damit später keine Schema-Migration
-  nötig ist.
+* **`quantity` ist im Schema angelegt und wird in der Liste angezeigt, hat aber noch
+  kein Eingabefeld.** Die erste Version hat bewusst nur das eine Feld ganz oben; das
+  Feld existiert schon, damit später keine Schema-Migration nötig ist. `note` wird
+  inzwischen auf der Detailseite als Beschreibung bearbeitet.
 
 Nicht enthalten (bewusst): mehrere Listen, Vorlagen, Statistiken, Offline-Caching.

@@ -219,5 +219,5 @@ Ein Prozess serviert alles: PocketBase liefert `pb_public/` inkl. SPA-Fallback a
   mitschickt und den die Shell als Text übernommen hat statt als Steuerzeichen. Abstellen
   mit `bind 'set enable-bracketed-paste off'` oder die Zeile tippen statt einfügen.
 * Bewusst *nicht* enthalten: mehrere Listen, Vorlagen, Statistiken, Offline-Caching.
-  `quantity` und `note` existieren im Schema und werden angezeigt, haben aber noch kein
-  Eingabefeld.
+  `quantity` existiert im Schema und wird angezeigt, hat aber noch kein Eingabefeld
+  (`note` bearbeitet die Detailseite `items/[id]`).
