@@ -1,4 +1,4 @@
-# Einkaufsliste
+# Zusammenleben
 
 Gemeinsame Einkaufsliste als leichtgewichtige PWA – inzwischen mit allem, was ein
 Haushalt sonst noch teilt.
