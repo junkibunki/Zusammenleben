@@ -15,8 +15,12 @@
 	// Seiten, die ohne Haushalt auskommen: der Ideen-Feed ist app-weit, und das
 	// Profil braucht man auch dann, wenn noch niemand einen zugeordnet hat. Der
 	// Trainingsplan gehoert einer Person, nicht einem Haushalt.
-	const OPEN_PATHS = ['/ideen', '/profile', '/training', '/training/einstellungen'];
-	const needsHousehold = $derived(!OPEN_PATHS.includes(page.url.pathname));
+	const OPEN_PATHS = ['/ideen', '/profile'];
+	const needsHousehold = $derived(
+		!OPEN_PATHS.includes(page.url.pathname) &&
+			page.url.pathname !== '/training' &&
+			!page.url.pathname.startsWith('/training/')
+	);
 
 	// Nur die ID, nicht `auth.user`: der Record wird bei jedem Profil-Update neu
 	// gesetzt, und der Effekt soll dann nicht die Haushalte neu laden.

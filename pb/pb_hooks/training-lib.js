@@ -68,9 +68,14 @@ function nextWorkout(app, userId, today) {
 	);
 	if (workouts.length === 0) return null;
 
-	const last = app.findRecordsByFilter('training_logs', 'user = {:uid}', '-date,-created', 1, 0, {
+	// Der juengste Eintrag mit Saetzen; einer nur mit Notiz war kein Training.
+	const recent = app.findRecordsByFilter('training_logs', 'user = {:uid}', '-date,-created', 50, 0, {
 		uid: userId
 	});
+	const last = [];
+	for (let i = 0; i < recent.length && last.length === 0; i++) {
+		if (recent[i].getString('sets') !== '[]') last.push(recent[i]);
+	}
 	if (last.length === 0) return workouts[0];
 
 	let lastWorkout = '';
@@ -87,6 +92,68 @@ function nextWorkout(app, userId, today) {
 	}
 	if (idx > -1 && last[0].getString('date') === today) return workouts[idx];
 	return workouts[(idx + 1) % workouts.length];
+}
+
+/**
+ * Steht fuer `date` schon ein Satz im Verlauf (oder eine Dauer)? Dann braucht es
+ * keine Erinnerung mehr. Ein Eintrag nur mit Notiz zaehlt nicht als Training.
+ */
+function trainedOn(app, userId, date) {
+	const params = { uid: userId, d: date };
+	const logs = app.findRecordsByFilter('training_logs', 'user = {:uid} && date = {:d}', '', 100, 0, params);
+	for (let i = 0; i < logs.length; i++) {
+		const raw = logs[i].getString('sets');
+		if (raw && raw !== 'null' && raw !== '[]') return true;
+	}
+	return (
+		app.findRecordsByFilter('training_sessions', 'user = {:uid} && date = {:d}', '', 1, 0, params).length > 0
+	);
+}
+
+const SETS_MAX = 30;
+
+function num(value, min, max, int) {
+	if (value === null || value === undefined || value === '') return null;
+	const n = Number(value);
+	if (!isFinite(n) || n < min || n > max) return NaN;
+	if (int && Math.floor(n) !== n) return NaN;
+	return n;
+}
+
+/**
+ * Prueft `sets` eines Eintrags und leitet `weight` ab (schwerster Arbeitssatz,
+ * sonst 0). Liefert eine Fehlermeldung oder '' -- werfen muss der Callback,
+ * damit der Fehler als Feldfehler ankommt (docs/pitfalls/pocketbase-hooks.md).
+ */
+function normalizeLog(record) {
+	let sets;
+	try {
+		sets = JSON.parse(record.getString('sets') || '[]');
+	} catch {
+		return 'Die Sätze sind kein gültiges JSON.';
+	}
+	if (sets === null) sets = [];
+	if (!Array.isArray(sets)) return 'Die Sätze müssen eine Liste sein.';
+	if (sets.length > SETS_MAX) return `Höchstens ${SETS_MAX} Sätze pro Übung.`;
+
+	const clean = [];
+	let top = 0;
+	for (let i = 0; i < sets.length; i++) {
+		const s = sets[i] || {};
+		const weight = num(s.weight, 0, 1000, false);
+		const reps = num(s.reps, 0, 1000, true);
+		const seconds = num(s.seconds, 0, 36000, true);
+		if ([weight, reps, seconds].some((v) => typeof v === 'number' && isNaN(v))) {
+			return `Satz ${i + 1} hat einen ungültigen Wert.`;
+		}
+		if (weight === null && reps === null && seconds === null) continue;
+		const warmup = s.warmup === true;
+		clean.push({ weight, reps, seconds, warmup });
+		if (!warmup && weight !== null && weight > top) top = weight;
+	}
+	record.set('sets', clean);
+	record.set('weight', top);
+	return '';
 }
 
 /** Haengt "Training" im Profil im Menue? Ausgeblendet heisst: keine Erinnerung. */
@@ -127,6 +194,8 @@ function sendDueReminders(app, now) {
 
 		const userId = plan.getString('user');
 		if (!wantsTraining(app, userId)) continue;
+		// Wer morgens schon trainiert hat, bekommt abends keine Erinnerung mehr.
+		if (trainedOn(app, userId, t.date)) continue;
 
 		try {
 			plan.set('reminded_on', t.date);
@@ -156,4 +225,4 @@ function sendDueReminders(app, now) {
 	return sent;
 }
 
-module.exports = { berlin, sendDueReminders };
+module.exports = { berlin, sendDueReminders, normalizeLog };

@@ -105,7 +105,10 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── expenses.svelte.js    # $state der Ausgaben + Realtime, Cent-Aufteilung
 │       │   ├── wishes.svelte.js      # $state der Wuensche der *anderen* + eigener Zaehler
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
-│       │   ├── training.svelte.js    # privater Trainingsplan: Tage, Uebungen, Gewichte
+│       │   ├── training.svelte.js    # privater Trainingsplan: Tage, Uebungen, Saetze,
+│       │   │                         # Dauer, Koerpergewicht, CSV-Export
+│       │   ├── training-timer.svelte.js # Satzpause + Stoppuhr (localStorage)
+│       │   ├── TrainingChart.svelte  # SVG-Linie fuer Verlauf und Koerpergewicht
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
 │       │   ├── motion.js             # Listen-Transitions enter/leave, reducedMotion()
@@ -123,8 +126,10 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # Salden, wer-schuldet-wem), profile/,
 │                                  # wuensche/ (Wuensch dir was: eigene Wuensche
 │                                  # sind unsichtbar, nur gezaehlt), training/
-│                                  # (Gewichte eintragen; einstellungen/ = Trainings,
-│                                  # Uebungen, Tage; privat, im Menue nur mit
+│                                  # (Saetze eintragen, Entry*; kalender/,
+│                                  # koerpergewicht/, uebung/[id]/ = Verlauf;
+│                                  # einstellungen/ = Trainings, Uebungen, Tage,
+│                                  # Export; privat, im Menue nur mit
 │                                  # users.show_training), residents/,
 │                                  # login/
 ├── pb/
@@ -133,7 +138,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │   ├── pb_hooks/                  # push.pb.js (Hook-Anmeldungen), push-lib.js
 │   │                              # (Schluessel/Empfaenger/Versand), wishes.pb.js
 │   │                              # (Doppelte-Pruefung + Zaehler-Route), training.pb.js
-│   │                              # + training-lib.js (Cron-Erinnerung), webpush.js
+│   │                              # + training-lib.js (Saetze pruefen, Cron-
+│   │                              # Erinnerung), webpush.js
 │   │                              # GENERIERT
 │   ├── pb_data/                   # gitignored, die SQLite-DB
 │   └── pb_public/                 # gitignored, Build-Output

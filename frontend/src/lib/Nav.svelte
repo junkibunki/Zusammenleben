@@ -63,11 +63,15 @@
 				? 'Haushalte'
 				: page.url.pathname === '/einstellungen'
 					? 'Haushalt-Einstellungen'
-					: page.url.pathname === '/training'
+					: page.url.pathname === '/training' || page.url.pathname === '/training/kalender'
 						? 'Training'
 						: page.url.pathname === '/training/einstellungen'
 							? 'Training einrichten'
-							: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
+							: page.url.pathname === '/training/koerpergewicht'
+								? 'Körpergewicht'
+								: page.url.pathname.startsWith('/training/uebung/')
+									? 'Übung'
+									: (LINKS.find((l) => l.href === page.url.pathname)?.title ?? 'Einkaufsliste')
 	);
 	const photo = $derived(avatarUrl(auth.user));
 	const label = $derived(auth.user?.name || auth.user?.email?.split('@')[0] || '');

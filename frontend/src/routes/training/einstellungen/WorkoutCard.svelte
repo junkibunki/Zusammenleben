@@ -17,11 +17,20 @@
 		deleteExercise,
 		moveExercise,
 		trainingError,
+		kindOf,
+		targetLabel,
+		parseWeight,
+		formatWeight,
+		KINDS,
+		DEFAULT_REST,
+		DEFAULT_INCREMENT,
 		EXERCISE_MAX,
 		WORKOUT_MAX
 	} from '$lib/training.svelte.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
@@ -31,7 +40,6 @@
 	let { workout, index, count } = $props();
 
 	const exercises = $derived(exercisesOf(workout.id));
-	const validCount = (n, max) => Number.isInteger(n) && n >= 1 && n <= max;
 
 	let error = $state(null);
 	let moving = $state(false);
@@ -78,23 +86,107 @@
 
 	// --- Uebungen -----------------------------------------------------------
 
+	// Entwurf der Zahlenfelder einer Uebung. `kind` kann '' werden (das Select
+	// laesst sich abwaehlen, docs/pitfalls/designsystem.md) -- gelesen wird es
+	// deshalb nur ueber kindOf(). `repsMax` leer (null) = kein Bereich,
+	// `increment` als Text, damit das deutsche Komma geht.
+	const decimal = (v) => String(v ?? 0).replace('.', ',');
+
+	function blankDraft() {
+		return {
+			kind: 'weight',
+			sets: 3,
+			reps: 10,
+			repsMax: null,
+			rest: DEFAULT_REST,
+			increment: decimal(DEFAULT_INCREMENT),
+			more: false
+		};
+	}
+
+	function draftOf(ex) {
+		return {
+			kind: kindOf(ex),
+			sets: ex.sets,
+			reps: ex.reps,
+			repsMax: ex.reps_max || null,
+			rest: ex.rest ?? 0,
+			increment: decimal(ex.increment),
+			more: false
+		};
+	}
+
+	const isInt = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
+	const isEmpty = (v) => v === null || v === undefined || v === '';
+
+	/**
+	 * Prueft einen Entwurf. Liefert `{ fields }` fuer addExercise/updateExercise
+	 * oder `{ error, more }`; `more` heisst, der Fehler steckt in einem Feld
+	 * hinter "Mehr" -- dann klappt der Bereich auf.
+	 */
+	function check(d) {
+		const kind = kindOf(d);
+		const time = kind === 'time';
+		const max = time ? 3600 : 200;
+		const unit = time ? 'Sekunden' : 'Wiederholungen';
+		if (!isInt(d.sets, 1, 20)) return { error: 'Sätze: bitte eine ganze Zahl von 1 bis 20.' };
+		if (!isInt(d.reps, 1, max)) return { error: `${unit}: bitte eine ganze Zahl von 1 bis ${max}.` };
+		const repsMax = isEmpty(d.repsMax) ? 0 : d.repsMax;
+		if (repsMax !== 0 && !isInt(repsMax, d.reps, max)) {
+			return {
+				error: `„bis“: bitte eine ganze Zahl von ${d.reps} bis ${max} – oder leer lassen für ein festes Ziel.`
+			};
+		}
+		const rest = isEmpty(d.rest) ? 0 : d.rest;
+		if (!isInt(rest, 0, 900)) {
+			return { error: 'Pause: bitte ganze Sekunden von 0 bis 900 (0 = kein Timer).', more: true };
+		}
+		const fields = {
+			sets: d.sets,
+			reps: d.reps,
+			kind,
+			reps_max: repsMax === d.reps ? 0 : repsMax,
+			rest
+		};
+		// Die Steigerung gibt es nur bei Gewicht; sonst bleibt der gespeicherte
+		// Wert stehen (beim Anlegen: die Vorgabe), falls die Art zurueckwechselt.
+		if (kind === 'weight') {
+			const inc = parseWeight(d.increment) ?? 0;
+			if (Number.isNaN(inc) || inc > 50) {
+				return { error: 'Steigerung: bitte eine Zahl von 0 bis 50 kg, z. B. 2,5.', more: true };
+			}
+			fields.increment = inc;
+		}
+		return { fields };
+	}
+
+	/** Zusammenfassung der Felder hinter "Mehr", z.B. "Pause 90 s · +2,5 kg". */
+	function moreSummary(d) {
+		const rest = isInt(d.rest, 1, 900) ? `Pause ${d.rest} s` : 'Kein Pausen-Timer';
+		if (kindOf(d) !== 'weight') return rest;
+		const inc = parseWeight(d.increment);
+		return `${rest} · ${inc ? `+${formatWeight(inc)}` : 'keine Steigerung'}`;
+	}
+
+	const kindLabel = (kind) => KINDS.find((k) => k.id === kind)?.label ?? kind;
+
 	let newName = $state('');
-	let newSets = $state(3);
-	let newReps = $state(10);
+	let newDraft = $state(blankDraft());
+	const newCheck = $derived(check(newDraft));
 	let adding = $state(false);
 
 	let editingId = $state('');
 	let editName = $state('');
-	let editSets = $state(3);
-	let editReps = $state(10);
+	let editDraft = $state(blankDraft());
+	const editCheck = $derived(check(editDraft));
 
 	async function add(e) {
 		e.preventDefault();
-		if (!newName.trim() || !validCount(newSets, 20) || !validCount(newReps, 200)) return;
+		if (!newName.trim() || !newCheck.fields) return;
 		adding = true;
 		error = null;
 		try {
-			await addExercise(workout.id, { name: newName, sets: newSets, reps: newReps });
+			await addExercise(workout.id, { name: newName, ...newCheck.fields });
 			newName = '';
 		} catch (err) {
 			error = trainingError(err, 'Anlegen fehlgeschlagen');
@@ -106,16 +198,15 @@
 	function startEdit(ex) {
 		editingId = ex.id;
 		editName = ex.name;
-		editSets = ex.sets;
-		editReps = ex.reps;
+		editDraft = draftOf(ex);
 		error = null;
 	}
 
 	async function saveEdit(e, ex) {
 		e.preventDefault();
-		if (!editName.trim() || !validCount(editSets, 20) || !validCount(editReps, 200)) return;
+		if (!editName.trim() || !editCheck.fields) return;
 		try {
-			await updateExercise(ex, { name: editName, sets: editSets, reps: editReps });
+			await updateExercise(ex, { name: editName, ...editCheck.fields });
 			editingId = '';
 			error = null;
 		} catch (err) {
@@ -223,54 +314,13 @@
 									class="h-11"
 									onkeydown={(e) => e.key === 'Escape' && (editingId = '')}
 								/>
-								<div class="flex items-center gap-1.5">
-									<Input
-										type="number"
-										inputmode="numeric"
-										min="1"
-										max="20"
-										bind:value={editSets}
-										aria-label="Sätze"
-										class="h-11 w-16"
-									/>
-									<span class="text-muted-foreground text-sm">×</span>
-									<Input
-										type="number"
-										inputmode="numeric"
-										min="1"
-										max="200"
-										bind:value={editReps}
-										aria-label="Wiederholungen"
-										class="h-11 w-16"
-									/>
-									<span class="flex-1"></span>
-									<Button
-										type="submit"
-										variant="ghost"
-										size="icon"
-										class="size-11 shrink-0"
-										aria-label="Übung speichern"
-										disabled={!editName.trim() || !validCount(editSets, 20) || !validCount(editReps, 200)}
-									>
-										<CheckIcon class="size-4" />
-									</Button>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										class="text-muted-foreground size-11 shrink-0"
-										aria-label="Abbrechen"
-										onclick={() => (editingId = '')}
-									>
-										<XIcon class="size-4" />
-									</Button>
-								</div>
+								{@render exerciseFields(editDraft, `edit-${ex.id}`, editCheck, editActions)}
 							</form>
 						{:else}
 							<div class="min-w-0 flex-1 py-2">
 								<p class="truncate text-sm">{ex.name}</p>
 								<p class="text-muted-foreground text-xs">
-									{ex.sets} {ex.sets === 1 ? 'Satz' : 'Sätze'} × {ex.reps} Wdh.
+									{targetLabel(ex)}{kindOf(ex) !== 'weight' ? ` · ${kindLabel(kindOf(ex))}` : ''}
 								</p>
 							</div>
 							<Button
@@ -334,38 +384,7 @@
 				autocomplete="off"
 				class="h-11"
 			/>
-			<div class="flex items-center gap-1.5">
-				<Input
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="20"
-					bind:value={newSets}
-					aria-label="Sätze"
-					class="h-11 w-16"
-				/>
-				<span class="text-muted-foreground text-sm">Sätze ×</span>
-				<Input
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="200"
-					bind:value={newReps}
-					aria-label="Wiederholungen"
-					class="h-11 w-16"
-				/>
-				<span class="text-muted-foreground text-sm">Wdh.</span>
-				<span class="flex-1"></span>
-				<Button
-					type="submit"
-					size="icon-lg"
-					class="size-11 shrink-0"
-					aria-label="Übung zu {workout.name} hinzufügen"
-					disabled={adding || !newName.trim() || !validCount(newSets, 20) || !validCount(newReps, 200)}
-				>
-					<PlusIcon class="size-4" />
-				</Button>
-			</div>
+			{@render exerciseFields(newDraft, `new-${workout.id}`, newCheck, addActions)}
 		</form>
 	</Card.Content>
 
@@ -429,3 +448,156 @@
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
+
+<!-- Zahlenfelder einer Uebung, gemeinsam fuer Anlegen und Bearbeiten. `actions`
+     sitzt rechts in der Zeile der Wdh., damit das Formular auf dem Handy kurz
+     bleibt; Pause und Steigerung liegen hinter "Mehr". -->
+{#snippet exerciseFields(d, id, result, actions)}
+	{@const kind = kindOf(d)}
+	{@const time = kind === 'time'}
+	{@const max = time ? 3600 : 200}
+	{@const open = d.more || !!result.more}
+	<div class="flex gap-2">
+		<div class="grid min-w-0 flex-1 gap-1">
+			<Label for="{id}-kind" class="text-muted-foreground text-xs font-normal">Art</Label>
+			<Select.Root type="single" bind:value={d.kind}>
+				<Select.Trigger id="{id}-kind" class="h-11 w-full data-[size=default]:h-11">
+					<span class="truncate">{kindLabel(kind)}</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each KINDS as k (k.id)}
+						<Select.Item value={k.id} label={k.label}>{k.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+		<div class="grid w-16 shrink-0 gap-1">
+			<Label for="{id}-sets" class="text-muted-foreground text-xs font-normal">Sätze</Label>
+			<Input
+				id="{id}-sets"
+				type="number"
+				inputmode="numeric"
+				min="1"
+				max="20"
+				bind:value={d.sets}
+				class="h-11"
+			/>
+		</div>
+	</div>
+	<div class="grid gap-1">
+		<Label for="{id}-reps" class="text-muted-foreground text-xs font-normal">
+			{time ? 'Sekunden von / bis' : 'Wdh. von / bis'}
+		</Label>
+		<div class="flex items-center gap-1.5">
+			<Input
+				id="{id}-reps"
+				type="number"
+				inputmode="numeric"
+				min="1"
+				{max}
+				bind:value={d.reps}
+				class="h-11 w-18"
+			/>
+			<span class="text-muted-foreground text-sm">–</span>
+			<Input
+				type="number"
+				inputmode="numeric"
+				min="1"
+				{max}
+				bind:value={d.repsMax}
+				placeholder="opt."
+				aria-label={time ? 'Sekunden bis (optional, für einen Bereich)' : 'Wdh. bis (optional, für einen Bereich)'}
+				class="h-11 w-18"
+			/>
+			<span class="flex-1"></span>
+			{@render actions(result)}
+		</div>
+	</div>
+	<Button
+		type="button"
+		variant="ghost"
+		class="text-muted-foreground -ml-2 h-11 max-w-full justify-start self-start px-2 font-normal"
+		aria-expanded={open}
+		aria-controls="{id}-more"
+		onclick={() => (d.more = !open)}
+	>
+		<ChevronDownIcon class="size-4 transition-transform {open ? 'rotate-180' : ''}" />
+		<span class="truncate">Mehr: {moreSummary(d)}</span>
+	</Button>
+	{#if open}
+		<div id="{id}-more" class="flex flex-col gap-1">
+			<div class="flex gap-2">
+				<div class="grid w-24 gap-1">
+					<Label for="{id}-rest" class="text-muted-foreground text-xs font-normal">Pause (s)</Label>
+					<Input
+						id="{id}-rest"
+						type="number"
+						inputmode="numeric"
+						min="0"
+						max="900"
+						bind:value={d.rest}
+						class="h-11"
+					/>
+				</div>
+				{#if kind === 'weight'}
+					<div class="grid w-32 gap-1">
+						<Label for="{id}-inc" class="text-muted-foreground text-xs font-normal">
+							Steigerung (kg)
+						</Label>
+						<Input
+							id="{id}-inc"
+							type="text"
+							inputmode="decimal"
+							autocomplete="off"
+							bind:value={d.increment}
+							class="h-11"
+						/>
+					</div>
+				{/if}
+			</div>
+			<p class="text-muted-foreground text-xs">
+				{kind === 'weight'
+					? '0 = kein Pausen-Timer bzw. kein Steigerungsvorschlag.'
+					: '0 = kein Pausen-Timer.'}
+			</p>
+		</div>
+	{/if}
+	{#if result.error}
+		<p class="text-destructive text-sm" role="alert">{result.error}</p>
+	{/if}
+{/snippet}
+
+{#snippet addActions(result)}
+	<Button
+		type="submit"
+		size="icon-lg"
+		class="size-11 shrink-0"
+		aria-label="Übung zu {workout.name} hinzufügen"
+		disabled={adding || !newName.trim() || !result.fields}
+	>
+		<PlusIcon class="size-4" />
+	</Button>
+{/snippet}
+
+{#snippet editActions(result)}
+	<Button
+		type="submit"
+		variant="ghost"
+		size="icon"
+		class="size-11 shrink-0"
+		aria-label="Übung speichern"
+		disabled={!editName.trim() || !result.fields}
+	>
+		<CheckIcon class="size-4" />
+	</Button>
+	<Button
+		type="button"
+		variant="ghost"
+		size="icon"
+		class="text-muted-foreground size-11 shrink-0"
+		aria-label="Abbrechen"
+		onclick={() => (editingId = '')}
+	>
+		<XIcon class="size-4" />
+	</Button>
+{/snippet}

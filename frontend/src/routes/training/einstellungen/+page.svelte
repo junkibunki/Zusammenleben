@@ -3,6 +3,7 @@
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import DownloadIcon from '@lucide/svelte/icons/download';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { auth } from '$lib/pocketbase.svelte.js';
 	import { push, refreshPush, enablePush } from '$lib/push.svelte.js';
@@ -13,6 +14,8 @@
 		addWorkout,
 		savePlan,
 		trainingError,
+		exportCsv,
+		today,
 		WEEKDAYS,
 		DEFAULT_REMIND_AT,
 		WORKOUT_MAX
@@ -105,6 +108,33 @@
 			planError = trainingError(err, 'Speichern fehlgeschlagen');
 		} finally {
 			planBusy = false;
+		}
+	}
+
+	// --- Export -------------------------------------------------------------
+
+	let exportBusy = $state(false);
+	let exportError = $state(null);
+
+	async function downloadCsv() {
+		exportBusy = true;
+		exportError = null;
+		try {
+			const csv = await exportCsv();
+			const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `training-${today()}.csv`;
+			document.body.append(a);
+			a.click();
+			a.remove();
+			// Nicht sofort freigeben: manche Browser (Safari) lesen die URL erst
+			// nach dem Klick.
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+		} catch (err) {
+			exportError = trainingError(err, 'Export fehlgeschlagen');
+		} finally {
+			exportBusy = false;
 		}
 	}
 </script>
@@ -276,5 +306,33 @@
 				</Button>
 			</Card.Footer>
 		</form>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Daten exportieren</Card.Title>
+			<Card.Description>
+				Alle eingetragenen Sätze und Körpergewichte als CSV-Datei, z. B. für Excel.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-4">
+			<Button
+				type="button"
+				variant="outline"
+				size="lg"
+				class="h-11 w-full"
+				disabled={exportBusy || training.loading}
+				onclick={downloadCsv}
+			>
+				<DownloadIcon class="size-4" />
+				{exportBusy ? 'Exportiere …' : 'Verlauf als CSV herunterladen'}
+			</Button>
+			{#if exportError}
+				<Alert.Root variant="destructive">
+					<AlertCircleIcon />
+					<Alert.Description>{exportError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+		</Card.Content>
 	</Card.Root>
 </main>
