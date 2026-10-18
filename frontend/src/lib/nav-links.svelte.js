@@ -12,12 +12,12 @@ import { carName } from './households.svelte.js';
 /** So viele Seiten passen in die Schnellleiste unten. */
 export const QUICK_MAX = 3;
 /** Auswahl, solange jemand die Schnellleiste nie eingestellt hat (`quick_nav = null`). */
-export const QUICK_DEFAULT = ['/', '/ausgaben', '/gundula'];
+export const QUICK_DEFAULT = ['/', '/ausgaben'];
 
 /**
  * Die Seiten des Menues. `label` steht im Menue, `title` in der Topbar --
  * die Startseite heisst dort nach ihrem Inhalt, oben aber weiter nach der
- * App. `short` passt unter ein Icon der Schnellleiste. Das Auto heisst in
+ * App; die Schnellleiste zeigt dieselben `label` wie das Menue. Das Auto heisst in
  * jedem Haushalt anders (`households.car_name`), "Training" steht nur drin,
  * wer es im Profil eingeschaltet hat (`users.show_training`).
  *
@@ -28,22 +28,21 @@ export function navLinks() {
 	const car = carName();
 	const showTraining = Boolean(auth.user?.show_training);
 	return [
-		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', short: 'Liste', icon: ShoppingCartIcon },
-		{ href: '/ausgaben', label: 'Ich habe bezahlt', title: 'Ausgaben', short: 'Ausgaben', icon: EuroIcon },
-		{ href: '/gundula', label: `Wo ist ${car}`, title: `Wo ist ${car}`, short: car, icon: CarIcon },
+		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', icon: ShoppingCartIcon },
+		{ href: '/ausgaben', label: 'Ich habe bezahlt', title: 'Ausgaben', icon: EuroIcon },
+		{ href: '/gundula', label: `Wo ist ${car}`, title: `Wo ist ${car}`, icon: CarIcon },
 		{
 			href: '/ideen',
 			label: 'Neue Ideen für den grünen Freund',
 			title: 'Ideen für den grünen Freund',
-			short: 'Ideen',
 			icon: LightbulbIcon
 		},
-		{ href: '/wuensche', label: 'Wünsch dir was', title: 'Wünsch dir was', short: 'Wünsche', icon: GiftIcon },
+		{ href: '/wuensche', label: 'Wünsch dir was', title: 'Wünsch dir was', icon: GiftIcon },
 		...(showTraining
-			? [{ href: '/training', label: 'Training', title: 'Training', short: 'Training', icon: DumbbellIcon }]
+			? [{ href: '/training', label: 'Training', title: 'Training', icon: DumbbellIcon }]
 			: []),
-		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', short: 'Bewohner', icon: UsersIcon },
-		{ href: '/profile', label: 'Profil', title: 'Profil', short: 'Profil', icon: UserIcon }
+		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
+		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
 	];
 }
 

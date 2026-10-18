@@ -29,13 +29,13 @@
 				<li class="min-w-0 flex-1">
 					<a
 						href={link.href}
-						class="flex h-14 flex-col items-center justify-center gap-0.5 px-1 text-xs transition-colors {active
+						class="flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs transition-colors {active
 							? 'text-primary font-medium'
 							: 'text-muted-foreground hover:text-foreground'}"
 						aria-current={active ? 'page' : undefined}
 					>
 						<link.icon class="size-5" />
-						<span class="max-w-full truncate">{link.short}</span>
+						<span class="line-clamp-2 max-w-full text-center leading-tight">{link.label}</span>
 					</a>
 				</li>
 			{/each}
