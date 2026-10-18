@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { auth } from '$lib/pocketbase.svelte.js';
+	import { auth, session } from '$lib/pocketbase.svelte.js';
 	import { households, syncHouseholds } from '$lib/households.svelte.js';
 	import { syncCategories } from '$lib/categories.svelte.js';
 	import Nav from '$lib/Nav.svelte';
@@ -13,14 +13,16 @@
 
 	const onLogin = $derived(page.url.pathname === '/login');
 
-	// Seiten, die ohne Haushalt auskommen: der Ideen-Feed ist app-weit, und das
-	// Profil braucht man auch dann, wenn noch niemand einen zugeordnet hat. Der
-	// Trainingsplan gehoert einer Person, nicht einem Haushalt.
-	const OPEN_PATHS = ['/ideen', '/profile'];
+	// Seiten, die ohne Haushalt auskommen: der Ideen-Feed und "Muessen wir mal
+	// machen" sind app-weit, und das Profil braucht man auch dann, wenn noch
+	// niemand einen zugeordnet hat. Der Trainingsplan gehoert einer Person,
+	// nicht einem Haushalt.
+	const OPEN_PATHS = ['/ideen', '/profile', '/zusammen'];
 	const needsHousehold = $derived(
 		!OPEN_PATHS.includes(page.url.pathname) &&
 			page.url.pathname !== '/training' &&
-			!page.url.pathname.startsWith('/training/')
+			!page.url.pathname.startsWith('/training/') &&
+			!page.url.pathname.startsWith('/zusammen/')
 	);
 
 	// Nur die ID, nicht `auth.user`: der Record wird bei jedem Profil-Update neu
@@ -40,9 +42,30 @@
 		});
 	});
 
+	// Wer ausgeloggt einen Deeplink oeffnet (geteilter Link auf einen Eintrag)
+	// oder dessen Sitzung abgelaufen ist, landet nach dem Login dort statt auf
+	// der Startseite -- nach einem bewussten Logout nicht (`session.loggedOut`).
+	// Nur eigene Pfade, und welcher Host gemeint ist, sagt verlaesslich erst der
+	// URL-Parser ("/%09/example.com" wird dort zu "//example.com").
+	function nextPath(value) {
+		if (!value) return '/';
+		try {
+			const url = new URL(value, location.origin);
+			return url.origin === location.origin ? url.pathname + url.search : '/';
+		} catch {
+			return '/';
+		}
+	}
+
 	$effect(() => {
-		if (!auth.valid && !onLogin) goto('/login', { replaceState: true });
-		if (auth.valid && onLogin) goto('/', { replaceState: true });
+		if (!auth.valid && !onLogin) {
+			const here = page.url.pathname + page.url.search;
+			const plain = here === '/' || session.loggedOut;
+			goto(plain ? '/login' : `/login?next=${encodeURIComponent(here)}`, {
+				replaceState: true
+			});
+		}
+		if (auth.valid && onLogin) goto(nextPath(page.url.searchParams.get('next')), { replaceState: true });
 	});
 
 	$effect(() => {

@@ -30,7 +30,9 @@
 	const title = $derived(
 		page.url.pathname.startsWith('/items/')
 			? 'Eintrag'
-			: page.url.pathname === '/haushalte'
+			: page.url.pathname.startsWith('/zusammen/')
+				? 'Müssen wir mal machen'
+				: page.url.pathname === '/haushalte'
 				? 'Haushalte'
 				: page.url.pathname === '/einstellungen'
 					? 'Haushalt-Einstellungen'

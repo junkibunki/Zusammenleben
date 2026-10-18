@@ -15,8 +15,14 @@ pb.authStore.onChange(() => {
 	auth.valid = pb.authStore.isValid;
 });
 
+// Bewusst abgemeldet? Dann fuehrt der Login nicht auf die letzte Seite zurueck
+// (+layout.svelte, `next`) -- sonst landete die naechste Person am selben
+// Geraet dort. Kein $state: liest nur der Guard, und nur im Moment des Wechsels.
+export const session = { loggedOut: false };
+
 export async function login(email, password) {
 	await pb.collection('users').authWithPassword(email, password);
+	session.loggedOut = false;
 }
 
 export async function logout() {
@@ -30,6 +36,7 @@ export async function logout() {
 	} catch {
 		// Abmelden darf daran nicht scheitern.
 	}
+	session.loggedOut = true;
 	pb.authStore.clear();
 }
 

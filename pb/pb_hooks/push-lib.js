@@ -359,4 +359,104 @@ function notifyNewExpense(app, record, actorId) {
 	});
 }
 
-module.exports = { vapid, publicKey, broadcast, sendTest, notifyNewItem, notifyNewExpense, userLabel };
+/**
+ * Darf `uid` den "Muessen wir mal machen"-Eintrag sehen? Dieselbe Bedingung
+ * wie die Rules in 1790082000: ohne Haushalt jeder, sonst laufende Mitglieder.
+ * Wer aus dem Haushalt raus ist, steht vielleicht noch in `interested` --
+ * dann bekommt er keine Meldung mehr.
+ */
+function seesTogether(app, entry, uid) {
+	const household = entry.getString('household');
+	if (!household) return true;
+	const rows = app.findRecordsByFilter(
+		'memberships',
+		'user = {:u} && household = {:h} && (until = "" || until > @now)',
+		'',
+		1,
+		0,
+		{ u: uid, h: household }
+	);
+	return rows.length > 0;
+}
+
+/**
+ * Abos aller, die einen Eintrag verfolgen: Autor, wer dabei ist, und wer
+ * schon kommentiert hat -- ausser `exceptId` und ausser denen, die ihn nicht
+ * (mehr) sehen duerfen.
+ */
+function togetherSubscriptions(app, entry, exceptId) {
+	let ids = [entry.getString('author')].concat(entry.getStringSlice('interested'));
+	const comments = app.findRecordsByFilter(
+		'together_comments',
+		'entry = {:e}',
+		'',
+		500,
+		0,
+		{ e: entry.id }
+	);
+	for (let i = 0; i < comments.length; i++) ids.push(comments[i].getString('author'));
+
+	let out = [];
+	const seen = {};
+	for (let i = 0; i < ids.length; i++) {
+		const uid = ids[i];
+		if (!uid || uid === exceptId || seen[uid]) continue;
+		seen[uid] = true;
+		if (!seesTogether(app, entry, uid)) continue;
+		out = out.concat(
+			app.findRecordsByFilter('push_subscriptions', 'user = {:uid}', '-created', 50, 0, { uid })
+		);
+	}
+	return out;
+}
+
+/** "2026-10-24T14:00" -> "Sa 24.10. 14:00", ohne Uhrzeit nur "Sa 24.10." */
+function plannedLabel(value) {
+	const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(value || '');
+	if (!m) return '';
+	const weekday = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][
+		new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay()
+	];
+	return `${weekday} ${m[3]}.${m[2]}.${m[4] ? ` ${m[4]}:${m[5]}` : ''}`;
+}
+
+/** Ein Termin wurde gesetzt oder verschoben. */
+function notifyTogetherPlanned(app, entry, actorId) {
+	const who = userLabel(app, actorId);
+	const details = [plannedLabel(entry.getString('planned_at'))];
+	if (who) details.push(`von ${who}`);
+
+	return broadcast(app, togetherSubscriptions(app, entry, actorId), {
+		title: `Termin: ${entry.getString('title')}`,
+		body: details.filter(Boolean).join(' · '),
+		// Ein Tag pro Eintrag: ein verschobener Termin ersetzt die alte Meldung.
+		tag: `einkauf-together-plan-${entry.id}`,
+		url: `/zusammen/${entry.id}`
+	});
+}
+
+/** Ein neuer Kommentar. */
+function notifyTogetherComment(app, comment, actorId) {
+	const entry = app.findRecordById('together', comment.getString('entry'));
+	const who = userLabel(app, actorId || comment.getString('author')) || 'Jemand';
+	const text = comment.getString('text').replace(/\s+/g, ' ').trim();
+
+	return broadcast(app, togetherSubscriptions(app, entry, actorId), {
+		title: `${who} zu „${entry.getString('title')}“`,
+		body: text.length > 140 ? `${text.slice(0, 140)}…` : text,
+		tag: `einkauf-together-comment-${comment.id}`,
+		url: `/zusammen/${entry.id}`
+	});
+}
+
+module.exports = {
+	vapid,
+	publicKey,
+	broadcast,
+	sendTest,
+	notifyNewItem,
+	notifyNewExpense,
+	notifyTogetherPlanned,
+	notifyTogetherComment,
+	userLabel
+};

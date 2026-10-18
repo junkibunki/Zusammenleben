@@ -105,6 +105,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── expenses.svelte.js    # $state der Ausgaben + Realtime, Cent-Aufteilung
 │       │   ├── wishes.svelte.js      # $state der Wuensche der *anderen* + eigener Zaehler
 │       │   ├── push.svelte.js        # Abo an-/abmelden, Zustand der Erlaubnis
+│       │   ├── together.svelte.js    # "Muessen wir mal machen": fuer alle oder
+│       │   │                         # Haushalt, dabei, Termin, Kommentare
 │       │   ├── training.svelte.js    # privater Trainingsplan: Tage, Uebungen, Saetze,
 │       │   │                         # Dauer, Koerpergewicht, CSV-Export
 │       │   ├── training-timer.svelte.js # Satzpause + Stoppuhr (localStorage)
@@ -126,7 +128,9 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # ausgaben/ (teilen,
 │                                  # Salden, wer-schuldet-wem), profile/,
 │                                  # wuensche/ (Wuensch dir was: eigene Wuensche
-│                                  # sind unsichtbar, nur gezaehlt), training/
+│                                  # sind unsichtbar, nur gezaehlt), zusammen/
+│                                  # (+ [id]/ mit Termin, Kommentaren,
+│                                  # Deeplink), training/
 │                                  # (Saetze eintragen, Entry*; kalender/, feed/,
 │                                  # koerpergewicht/, uebung/[id]/ = Verlauf;
 │                                  # einstellungen/ = Trainings, Uebungen, Tage,
@@ -140,7 +144,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │   │                              # (Schluessel/Empfaenger/Versand), wishes.pb.js
 │   │                              # (Doppelte-Pruefung + Zaehler-Route), training.pb.js
 │   │                              # + training-lib.js (Saetze pruefen, Cron-
-│   │                              # Erinnerung), webpush.js
+│   │                              # Erinnerung), together.pb.js
+│   │                              # (Schreibrechte + Push), webpush.js
 │   │                              # GENERIERT
 │   ├── pb_data/                   # gitignored, die SQLite-DB
 │   └── pb_public/                 # gitignored, Build-Output

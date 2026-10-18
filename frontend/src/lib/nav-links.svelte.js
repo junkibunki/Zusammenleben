@@ -3,6 +3,7 @@ import CarIcon from '@lucide/svelte/icons/car';
 import LightbulbIcon from '@lucide/svelte/icons/lightbulb';
 import EuroIcon from '@lucide/svelte/icons/euro';
 import GiftIcon from '@lucide/svelte/icons/gift';
+import PartyPopperIcon from '@lucide/svelte/icons/party-popper';
 import DumbbellIcon from '@lucide/svelte/icons/dumbbell';
 import UsersIcon from '@lucide/svelte/icons/users';
 import UserIcon from '@lucide/svelte/icons/user';
@@ -38,6 +39,12 @@ export function navLinks() {
 			icon: LightbulbIcon
 		},
 		{ href: '/wuensche', label: 'Wünsch dir was', title: 'Wünsch dir was', icon: GiftIcon },
+		{
+			href: '/zusammen',
+			label: 'Müssen wir mal machen',
+			title: 'Müssen wir mal machen',
+			icon: PartyPopperIcon
+		},
 		...(showTraining
 			? [{ href: '/training', label: 'Training', title: 'Training', icon: DumbbellIcon }]
 			: []),
