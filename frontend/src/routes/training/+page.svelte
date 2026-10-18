@@ -279,7 +279,7 @@
 	const restVisible = $derived(timer.restEnd > 0 || timer.restDoneAt > 0);
 </script>
 
-<main class="flex flex-1 flex-col gap-4 px-3 py-4 {restVisible ? 'pb-24' : ''}">
+<main class="flex flex-1 flex-col gap-4 px-3 py-4 {restVisible ? 'pb-32' : ''}">
 	<TrainingTabs />
 
 	{#if training.error}

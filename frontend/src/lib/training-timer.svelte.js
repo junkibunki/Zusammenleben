@@ -7,10 +7,13 @@ import { untrack } from 'svelte';
 
 const REST_KEY = 'training.rest.';
 const WATCH_KEY = 'training.watch.';
-/** So lange steht "Pause vorbei" da, bevor die Leiste verschwindet. */
-const DONE_SHOW_MS = 6000;
-/** Nur so kurz nach dem Ende wird vibriert -- nicht nach Minuten im Hintergrund. */
+const SOUND_KEY = 'training.sound';
+/** So lange steht "Pause vorbei" da, wenn man es nicht wegtippt. */
+const DONE_SHOW_MS = 60000;
+/** Nur so kurz nach dem Ende wird vibriert/getoent -- nicht nach Minuten im Hintergrund. */
 const VIBRATE_WITHIN_MS = 3000;
+/** In den letzten so vielen Sekunden tickt es leise. */
+export const COUNTDOWN_S = 3;
 
 export const timer = $state({
 	now: Date.now(),
@@ -21,13 +24,17 @@ export const timer = $state({
 	/** Wann die letzte Pause abgelaufen ist, 0 = nicht (mehr) anzeigen. */
 	restDoneAt: 0,
 	/** Laufende Stoppuhr: `{ date, workout, start }` oder null. */
-	watch: null
+	watch: null,
+	/** Ton am Ende der Pause (pro Geraet, Vorgabe an). */
+	sound: true
 });
 
 // Steuerung, kein $state (CLAUDE.md zu $effect-Schleifen).
 let interval = null;
 let active = false;
 let user = '';
+/** Zuletzt getickte Restsekunde, damit jede nur einmal tickt. */
+let lastTick = 0;
 
 function read(key) {
 	try {
@@ -49,10 +56,126 @@ function write(key, value) {
 
 function vibrate() {
 	try {
-		navigator.vibrate?.([200, 100, 200]);
+		navigator.vibrate?.([300, 120, 300, 120, 500]);
 	} catch {
 		// Kein Vibrationsmotor oder nicht erlaubt.
 	}
+}
+
+// --- Ton --------------------------------------------------------------------
+//
+// Per Web Audio erzeugt, keine Audiodatei. Browser (vor allem iOS) lassen Ton
+// erst nach einer Bedienung zu; deshalb wird der Kontext in startRest()
+// angelegt bzw. fortgesetzt -- das laeuft im Tipp auf den Satz-Haken. Der
+// Stummschalter des iPhones schaltet Web Audio trotzdem stumm.
+
+let audio = null;
+
+/** iOS setzt den Kontext beim Sperren auf "suspended" oder "interrupted". */
+function resumeAudio() {
+	if (audio && audio.state !== 'running') audio.resume().catch(() => {});
+}
+
+function unlockAudio() {
+	if (!timer.sound) return;
+	try {
+		audio ??= new (window.AudioContext || window.webkitAudioContext)();
+		resumeAudio();
+		// Ein stiller Puffer im Tipp schaltet aeltere iOS-Versionen frei.
+		const src = audio.createBufferSource();
+		src.buffer = audio.createBuffer(1, 1, 22050);
+		src.connect(audio.destination);
+		src.start(0);
+	} catch {
+		audio = null;
+	}
+}
+
+/** Einzelne Toene: `[Frequenz Hz, Start s, Dauer s, Lautstaerke 0..1]`. */
+function play(notes) {
+	if (!timer.sound || !audio) return;
+	resumeAudio();
+	try {
+		const t0 = audio.currentTime + 0.02;
+		for (const [freq, at, len, vol] of notes) {
+			const osc = audio.createOscillator();
+			const gain = audio.createGain();
+			osc.type = 'sine';
+			osc.frequency.value = freq;
+			// Kurze Rampen, sonst knackt es am Anfang und Ende jedes Tons.
+			gain.gain.setValueAtTime(0, t0 + at);
+			gain.gain.linearRampToValueAtTime(vol, t0 + at + 0.01);
+			gain.gain.setValueAtTime(vol, t0 + at + len - 0.03);
+			gain.gain.linearRampToValueAtTime(0, t0 + at + len);
+			osc.connect(gain).connect(audio.destination);
+			osc.start(t0 + at);
+			osc.stop(t0 + at + len + 0.02);
+		}
+	} catch {
+		// Ton ist Beiwerk; die Anzeige reicht zur Not.
+	}
+}
+
+/** Leises Ticken in den letzten Sekunden. */
+function countdownTick() {
+	play([[660, 0, 0.08, 0.25]]);
+}
+
+/** Ende der Pause: drei steigende Toene, der letzte laenger. */
+function doneChime() {
+	play([
+		[880, 0, 0.15, 0.6],
+		[1109, 0.2, 0.15, 0.6],
+		[1319, 0.4, 0.4, 0.7]
+	]);
+}
+
+/** Ton an/aus (pro Geraet). */
+export function toggleSound() {
+	timer.sound = !timer.sound;
+	write(SOUND_KEY, timer.sound);
+	if (timer.sound) {
+		unlockAudio();
+		countdownTick();
+	}
+}
+
+// --- Bildschirm wach halten -------------------------------------------------
+//
+// Ohne Wake Lock sperrt das Handy waehrend einer 90-s-Pause, JS steht still,
+// und Ton wie Vibration fallen aus. Gilt nur, solange eine Pause laeuft.
+// Der Browser gibt die Sperre beim Verlassen der Seite selbst frei; onVisible
+// fordert sie neu an. In der iOS-Homescreen-PWA erst ab iOS 18.4.
+
+let wakeLock = null;
+/** Eine Anfrage laeuft schon -- sonst entstuenden zwei Sperren, eine verwaist. */
+let wakeLockPending = false;
+
+function keepAwake() {
+	if (wakeLock || wakeLockPending || timer.restEnd === 0) return;
+	if (!navigator.wakeLock || document.visibilityState !== 'visible') return;
+	wakeLockPending = true;
+	navigator.wakeLock
+		.request('screen')
+		.then((lock) => {
+			wakeLockPending = false;
+			// Inzwischen vorbei oder die Seite verlassen: gleich wieder freigeben.
+			if (timer.restEnd === 0 || !active) return lock.release();
+			wakeLock = lock;
+			lock.addEventListener('release', () => {
+				if (wakeLock === lock) wakeLock = null;
+			});
+		})
+		.catch(() => {
+			// Abgelehnt (z.B. Energiesparmodus).
+			wakeLockPending = false;
+		});
+}
+
+function letSleep() {
+	const lock = wakeLock;
+	wakeLock = null;
+	lock?.release().catch(() => {});
 }
 
 function busy() {
@@ -62,11 +185,22 @@ function busy() {
 function tick() {
 	const now = Date.now();
 	timer.now = now;
+	if (timer.restEnd > 0 && now < timer.restEnd) {
+		const left = Math.ceil((timer.restEnd - now) / 1000);
+		if (left <= COUNTDOWN_S && left !== lastTick) {
+			lastTick = left;
+			countdownTick();
+		}
+	}
 	if (timer.restEnd > 0 && now >= timer.restEnd) {
-		if (now - timer.restEnd < VIBRATE_WITHIN_MS) vibrate();
+		if (now - timer.restEnd < VIBRATE_WITHIN_MS) {
+			vibrate();
+			doneChime();
+		}
 		timer.restEnd = 0;
 		timer.restDoneAt = now;
 		write(REST_KEY + user, null);
+		letSleep();
 	}
 	if (timer.restDoneAt > 0 && now - timer.restDoneAt > DONE_SHOW_MS) timer.restDoneAt = 0;
 	if (!busy()) stopInterval();
@@ -74,7 +208,7 @@ function tick() {
 
 function schedule() {
 	if (!active || interval !== null || !busy()) return;
-	interval = setInterval(tick, 500);
+	interval = setInterval(tick, 250);
 }
 
 function stopInterval() {
@@ -83,10 +217,18 @@ function stopInterval() {
 	interval = null;
 }
 
+/** Freischalten bei einer echten Bedienung; Touch-pointerdown zaehlt dafuer nicht. */
+function onTap() {
+	unlockAudio();
+	if (audio?.state === 'running') document.removeEventListener('click', onTap);
+}
+
 function onVisible() {
 	if (document.visibilityState === 'visible') {
+		resumeAudio();
 		tick();
 		schedule();
+		keepAwake();
 	}
 }
 
@@ -99,6 +241,7 @@ export function startTimers(userId) {
 	return untrack(() => {
 		active = true;
 		user = userId;
+		timer.sound = read(SOUND_KEY) !== false;
 		const now = Date.now();
 		const rest = read(REST_KEY + user);
 		if (rest && rest.end > now) {
@@ -116,11 +259,18 @@ export function startTimers(userId) {
 				: null;
 		timer.now = now;
 		document.addEventListener('visibilitychange', onVisible);
+		// Nach einem Neuladen ist der Ton gesperrt, bis man irgendwo tippt.
+		document.addEventListener('click', onTap);
 		schedule();
+		keepAwake();
 		return () => {
 			active = false;
 			stopInterval();
+			letSleep();
 			document.removeEventListener('visibilitychange', onVisible);
+			document.removeEventListener('click', onTap);
+			// Den Audio-Thread nicht die ganze Sitzung laufen lassen (Akku).
+			audio?.suspend().catch(() => {});
 		};
 	});
 }
@@ -130,6 +280,8 @@ export function startTimers(userId) {
 /** Pause von `seconds` Sekunden starten (ersetzt eine laufende). */
 export function startRest(seconds) {
 	if (!(seconds > 0)) return;
+	unlockAudio();
+	lastTick = 0;
 	const now = Date.now();
 	timer.now = now;
 	timer.restTotal = seconds * 1000;
@@ -137,6 +289,7 @@ export function startRest(seconds) {
 	timer.restDoneAt = 0;
 	write(REST_KEY + user, { end: timer.restEnd, total: timer.restTotal });
 	schedule();
+	keepAwake();
 }
 
 /** Laufende Pause um `seconds` verlaengern. */
@@ -144,6 +297,7 @@ export function addRest(seconds) {
 	if (timer.restEnd === 0) return;
 	timer.restEnd += seconds * 1000;
 	timer.restTotal += seconds * 1000;
+	lastTick = 0;
 	write(REST_KEY + user, { end: timer.restEnd, total: timer.restTotal });
 }
 
@@ -152,6 +306,7 @@ export function skipRest() {
 	timer.restEnd = 0;
 	timer.restDoneAt = 0;
 	write(REST_KEY + user, null);
+	letSleep();
 	if (!busy()) stopInterval();
 }
 
