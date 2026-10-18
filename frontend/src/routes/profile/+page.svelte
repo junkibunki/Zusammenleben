@@ -6,6 +6,8 @@
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import BellOffIcon from '@lucide/svelte/icons/bell-off';
 	import { auth, avatarUrl, updateProfile, setShowTraining } from '$lib/pocketbase.svelte.js';
+	import { setQuickNav } from '$lib/pocketbase.svelte.js';
+	import { navLinks, quickPaths, QUICK_MAX } from '$lib/nav-links.svelte.js';
 	import { push, refreshPush, enablePush, disablePush, sendTestPush } from '$lib/push.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
@@ -36,6 +38,37 @@
 			menuError = err?.message ?? 'Speichern fehlgeschlagen';
 		} finally {
 			menuBusy = false;
+		}
+	}
+
+	// Schnellleiste unten (`users.quick_nav`), sofort gespeichert wie oben.
+	// `quick` kann Pfade enthalten, die gerade nicht im Menue stehen (Training
+	// ausgeschaltet) -- gezaehlt und gespeichert wird nur `chosen`.
+	const links = $derived(navLinks());
+	let quick = $state(quickPaths());
+	const chosen = $derived(
+		links
+			.map((l) => l.href)
+			.filter((href) => quick.includes(href))
+			.slice(0, QUICK_MAX)
+	);
+	let quickBusy = $state(false);
+	let quickError = $state('');
+
+	async function toggleQuick(href, value) {
+		const next = value ? [...chosen, href] : chosen.filter((p) => p !== href);
+		if (next.length > QUICK_MAX) return;
+		const before = quick;
+		quick = next;
+		quickBusy = true;
+		quickError = '';
+		try {
+			await setQuickNav(next);
+		} catch (err) {
+			quick = before;
+			quickError = err?.message ?? 'Speichern fehlgeschlagen';
+		} finally {
+			quickBusy = false;
 		}
 	}
 
@@ -301,6 +334,42 @@
 				<Alert.Root variant="destructive">
 					<AlertCircleIcon />
 					<Alert.Description>{menuError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+		</Card.Content>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Schnellleiste</Card.Title>
+			<Card.Description>
+				Bis zu {QUICK_MAX} Seiten in der Leiste unten. Ohne Auswahl verschwindet sie; das Menü
+				oben enthält weiter alles.
+			</Card.Description>
+		</Card.Header>
+
+		<Card.Content class="flex flex-col gap-1">
+			{#each links as link (link.href)}
+				{@const on = chosen.includes(link.href)}
+				{@const id = `quick-${link.href.replaceAll('/', '') || 'start'}`}
+				<div class="flex min-h-11 items-center gap-3">
+					<Checkbox
+						{id}
+						bind:checked={() => on, (v) => toggleQuick(link.href, v)}
+						disabled={quickBusy || (!on && chosen.length >= QUICK_MAX)}
+					/>
+					<Label for={id} class="flex flex-1 items-center gap-2 py-3">
+						<link.icon class="text-muted-foreground size-4" />
+						{link.label}
+					</Label>
+				</div>
+			{/each}
+			<p class="text-muted-foreground text-sm">{chosen.length} von {QUICK_MAX} gewählt.</p>
+
+			{#if quickError}
+				<Alert.Root variant="destructive" class="mt-3">
+					<AlertCircleIcon />
+					<Alert.Description>{quickError}</Alert.Description>
 				</Alert.Root>
 			{/if}
 		</Card.Content>

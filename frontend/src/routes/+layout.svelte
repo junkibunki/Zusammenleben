@@ -6,6 +6,7 @@
 	import { households, syncHouseholds } from '$lib/households.svelte.js';
 	import { syncCategories } from '$lib/categories.svelte.js';
 	import Nav from '$lib/Nav.svelte';
+	import QuickNav from '$lib/QuickNav.svelte';
 	import Dragon from '$lib/Dragon.svelte';
 
 	let { children } = $props();
@@ -61,8 +62,9 @@
 {#if onLogin}
 	{@render children()}
 {:else}
-	<!-- Rahmen samt Navigation gilt fuer alle angemeldeten Seiten. -->
-	<div class="safe-b mx-auto flex min-h-dvh w-full max-w-2xl flex-col">
+	<!-- Rahmen samt Navigation gilt fuer alle angemeldeten Seiten. Die untere
+	     Safe-Area haelt QuickNav frei, mit oder ohne Leiste. -->
+	<div class="mx-auto flex min-h-dvh w-full max-w-2xl flex-col">
 		<Nav />
 		{#if !needsHousehold || households.activeId}
 			{@render children()}
@@ -80,6 +82,7 @@
 				</div>
 			</main>
 		{/if}
+		<QuickNav />
 		<!-- Osterei. Liegt `fixed` ueber allem und faengt keinen Tap ab. -->
 		<Dragon />
 	</div>

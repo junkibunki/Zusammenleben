@@ -1,50 +1,21 @@
 <script>
 	import { page } from '$app/state';
 	import MenuIcon from '@lucide/svelte/icons/menu';
-	import ShoppingCartIcon from '@lucide/svelte/icons/shopping-cart';
-	import CarIcon from '@lucide/svelte/icons/car';
-	import LightbulbIcon from '@lucide/svelte/icons/lightbulb';
-	import EuroIcon from '@lucide/svelte/icons/euro';
-	import GiftIcon from '@lucide/svelte/icons/gift';
-	import DumbbellIcon from '@lucide/svelte/icons/dumbbell';
-	import UsersIcon from '@lucide/svelte/icons/users';
-	import UserIcon from '@lucide/svelte/icons/user';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { auth, logout, avatarUrl } from '$lib/pocketbase.svelte.js';
 	import { tapAvatar } from '$lib/easteregg.svelte.js';
-	import { households, activeHousehold, carName } from '$lib/households.svelte.js';
+	import { households, activeHousehold } from '$lib/households.svelte.js';
+	import { navLinks } from '$lib/nav-links.svelte.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 
-	// `title` steht in der Leiste, `label` im Menue -- die Startseite heisst dort
-	// nach ihrem Inhalt, oben aber weiter nach der App. Das Auto heisst in jedem
-	// Haushalt anders (`households.car_name`).
-	const car = $derived(carName());
-	// "Training" steht nur drin, wer es im Profil eingeschaltet hat
-	// (`users.show_training`).
-	const showTraining = $derived(Boolean(auth.user?.show_training));
-	const LINKS = $derived([
-		{ href: '/', label: 'Einkaufszettel', title: 'Einkaufsliste', icon: ShoppingCartIcon },
-		{ href: '/ausgaben', label: 'Ich habe bezahlt', title: 'Ausgaben', icon: EuroIcon },
-		{ href: '/gundula', label: `Wo ist ${car}`, title: `Wo ist ${car}`, icon: CarIcon },
-		{
-			href: '/ideen',
-			label: 'Neue Ideen für den grünen Freund',
-			title: 'Ideen für den grünen Freund',
-			icon: LightbulbIcon
-		},
-		{ href: '/wuensche', label: 'Wünsch dir was', title: 'Wünsch dir was', icon: GiftIcon },
-		...(showTraining
-			? [{ href: '/training', label: 'Training', title: 'Training', icon: DumbbellIcon }]
-			: []),
-		{ href: '/residents', label: 'Bewohner', title: 'Bewohner', icon: UsersIcon },
-		{ href: '/profile', label: 'Profil', title: 'Profil', icon: UserIcon }
-	]);
+	// Dieselbe Liste speist die Schnellleiste unten (QuickNav.svelte).
+	const LINKS = $derived(navLinks());
 
 	let open = $state(false);
 

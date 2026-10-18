@@ -73,3 +73,11 @@ export async function setShowTraining(value) {
 	const record = await pb.collection('users').update(me.id, { show_training: Boolean(value) });
 	pb.authStore.save(pb.authStore.token, record);
 }
+
+/** Pfade der Schnellleiste unten (`users.quick_nav`, Migration 1789995600). */
+export async function setQuickNav(paths) {
+	const me = pb.authStore.record;
+	if (!me) throw new Error('Nicht angemeldet');
+	const record = await pb.collection('users').update(me.id, { quick_nav: paths });
+	pb.authStore.save(pb.authStore.token, record);
+}
