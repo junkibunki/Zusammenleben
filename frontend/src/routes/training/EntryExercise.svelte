@@ -323,7 +323,8 @@
 			<PlusIcon />
 			Aufwärmsatz
 		</Button>
-		{#if kind === 'weight'}
+		<!-- Vorerst ausgeblendet; shift() bleibt fuer spaeter. -->
+		{#if false && kind === 'weight'}
 			<Button
 				variant="outline"
 				class="h-11 tabular-nums"

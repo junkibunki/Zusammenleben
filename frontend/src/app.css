@@ -124,6 +124,17 @@
 	box-shadow: var(--shadow-soft);
 }
 
+/* iOS-Safari zeichnet type="date" mit eigener Mindestbreite und -hoehe und
+   ignoriert h-11/min-w-0; ohne native Optik gelten die Utilities wieder. */
+input[type='date'] {
+	-webkit-appearance: none;
+	appearance: none;
+}
+input[type='date']::-webkit-date-and-time-value {
+	margin: 0;
+	text-align: left;
+}
+
 /* Durchgestrichener Eintrag. Ein Hintergrundstrich statt line-through, damit
    er sich von links nach rechts ziehen laesst. */
 .strike {

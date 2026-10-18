@@ -17,6 +17,7 @@
 		WEEKDAYS
 	} from '$lib/training.svelte.js';
 	import TrainingTabs from '../TrainingTabs.svelte';
+	import DayWeight from './DayWeight.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
@@ -347,20 +348,25 @@
 			</Card.Description>
 		</Card.Header>
 
-		{#if trained(info)}
-			<Card.Content>
-				<dl class="grid grid-cols-2 gap-3">
-					<div class="bg-muted/50 rounded-lg p-3">
-						<dt class="text-muted-foreground text-xs">Übungen</dt>
-						<dd class="mt-1 text-lg font-semibold tabular-nums">{info.exercises}</dd>
-					</div>
-					<div class="bg-muted/50 rounded-lg p-3">
-						<dt class="text-muted-foreground text-xs">Dauer</dt>
-						<dd class="mt-1 text-lg font-semibold tabular-nums">
-							{info.session?.duration ? formatDuration(info.session.duration) : '–'}
-						</dd>
-					</div>
-				</dl>
+		{#if trained(info) || selected <= todayIso}
+			<Card.Content class="flex flex-col gap-4">
+				{#if trained(info)}
+					<dl class="grid grid-cols-2 gap-3">
+						<div class="bg-muted/50 rounded-lg p-3">
+							<dt class="text-muted-foreground text-xs">Übungen</dt>
+							<dd class="mt-1 text-lg font-semibold tabular-nums">{info.exercises}</dd>
+						</div>
+						<div class="bg-muted/50 rounded-lg p-3">
+							<dt class="text-muted-foreground text-xs">Dauer</dt>
+							<dd class="mt-1 text-lg font-semibold tabular-nums">
+								{info.session?.duration ? formatDuration(info.session.duration) : '–'}
+							</dd>
+						</div>
+					</dl>
+				{/if}
+				{#if selected <= todayIso}
+					<DayWeight date={selected} />
+				{/if}
 			</Card.Content>
 		{/if}
 
