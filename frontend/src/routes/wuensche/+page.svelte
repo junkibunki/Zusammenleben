@@ -201,7 +201,7 @@
 			{#each groups as group (group.id)}
 				{@const photo = avatarUrl(group.user)}
 				{@const name = userLabel(group.user) || 'Jemand'}
-				<section class="bg-card overflow-hidden rounded-lg border">
+				<section class="surface">
 					<h2 class="flex items-center gap-3 border-b px-3 py-2.5">
 						<Avatar.Root class="shrink-0">
 							{#if photo}

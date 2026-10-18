@@ -27,6 +27,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import { enter, leave } from '$lib/motion.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
@@ -667,7 +668,7 @@
 			<p class="text-muted-foreground mb-1.5 px-1 text-xs font-medium tracking-wide uppercase">
 				Salden
 			</p>
-			<ul class="bg-card divide-y overflow-hidden rounded-lg border">
+			<ul class="surface divide-y">
 				{#each saldi as row (row.id)}
 					{@const label = nameOf(row.id)}
 					{@const photo = avatarUrl(people.get(row.id))}
@@ -718,7 +719,7 @@
 			</h2>
 
 			{#if debtsOpen}
-				<ul class="bg-card divide-y overflow-hidden rounded-lg border">
+				<ul class="surface divide-y">
 					{#each settlement.debts as debt (debt.from + debt.to)}
 						<li class="flex items-center gap-2 px-3 py-3">
 							<span class="min-w-0 flex-1 truncate text-sm">{nameOf(debt.from)}</span>
@@ -754,11 +755,11 @@
 			</p>
 		{:else}
 			<!-- Neuste zuerst; die Reihenfolge kommt aus dem Store (sort '-created'). -->
-			<ul class="bg-card divide-y overflow-hidden rounded-lg border">
+			<ul class="surface divide-y">
 				{#each expenses.items as expense (expense.id)}
 					{@const counts = countsIn(expense)}
 					{@const shares = splitShares(expense.amount_cents, expense.shared_with, expense.id)}
-					<li class="flex items-start gap-2 py-3 pr-1 pl-3">
+					<li class="flex items-start gap-2 py-3 pr-1 pl-3" in:enter out:leave>
 						<div class="min-w-0 flex-1">
 							<div class="flex items-baseline gap-2">
 								<span class="min-w-0 flex-1 truncate font-medium">{expense.title}</span>

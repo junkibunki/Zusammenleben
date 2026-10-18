@@ -3,7 +3,11 @@
 Lesen, bevor du an UI-Komponenten, `app.css` oder Layout arbeitest.
 
 Alle UI-Bausteine kommen aus **shadcn-svelte** (Style `vega`, Basisfarbe `neutral`), das
-Layout aus Tailwind-Utilities. Es gibt keine handgeschriebenen Komponenten-Styles.
+Layout aus Tailwind-Utilities. Handgeschrieben sind nur wenige Regeln in `app.css`: die
+Utility `surface` (Listenfläche mit weichem Schatten statt Rahmen), `.strike` (animierbarer
+Durchstrich) und Überschreibungen per `[data-slot='…']` *außerhalb jeder Layer* — nur so
+schlagen sie die Utilities der generierten Komponenten, ohne deren Dateien anzufassen.
+Listen-Transitions liegen in `lib/motion.js`.
 
 ## Werkzeug
 

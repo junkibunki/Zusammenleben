@@ -81,7 +81,9 @@
 	const isMain = $derived(current?.role === 'haupt');
 </script>
 
-<header class="safe-t bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
+<header
+	class="safe-t bg-background/95 sticky top-0 z-20 border-b backdrop-blur [view-transition-name:topbar]"
+>
 	<div class="flex h-14 items-center gap-1 px-2">
 		<Sheet.Root bind:open>
 			<Sheet.Trigger>

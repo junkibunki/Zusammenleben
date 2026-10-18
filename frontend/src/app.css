@@ -6,9 +6,12 @@
    dark:-Utilities in den shadcn-Komponenten nie. */
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
-/* Tokens aus der offiziellen shadcn-svelte-Registry (Theme "neutral"). */
+/* Tokens aus der offiziellen shadcn-svelte-Registry (Theme "neutral"), Primaer-,
+   Akzent- und Ring-Farbe gruen (Hue 150). */
 :root {
-	--radius: 0.625rem;
+	--radius: 0.875rem;
+	/* Weicher Schatten statt harter Rahmen fuer Karten und Listenflaechen. */
+	--shadow-soft: 0 1px 2px oklch(0 0 0 / 4%), 0 4px 16px oklch(0 0 0 / 6%);
 	/* Topbar: Safe Area + h-14 + 1px Rahmen. Die Eingabeleiste klebt darunter. */
 	--header-h: calc(env(safe-area-inset-top) + 3.5rem + 1px);
 	--background: oklch(1 0 0);
@@ -17,18 +20,18 @@
 	--card-foreground: oklch(0.145 0 0);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
-	--primary-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.52 0.14 150);
+	--primary-foreground: oklch(0.985 0.01 150);
 	--secondary: oklch(0.97 0 0);
 	--secondary-foreground: oklch(0.205 0 0);
 	--muted: oklch(0.97 0 0);
 	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
+	--accent: oklch(0.96 0.025 150);
+	--accent-foreground: oklch(0.3 0.08 150);
 	--destructive: oklch(0.577 0.245 27.325);
 	--border: oklch(0.922 0 0);
 	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
+	--ring: oklch(0.7 0.12 150);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -39,18 +42,20 @@
 		--card-foreground: oklch(0.985 0 0);
 		--popover: oklch(0.205 0 0);
 		--popover-foreground: oklch(0.985 0 0);
-		--primary: oklch(0.922 0 0);
-		--primary-foreground: oklch(0.205 0 0);
+		--primary: oklch(0.75 0.16 150);
+		--primary-foreground: oklch(0.2 0.04 150);
 		--secondary: oklch(0.269 0 0);
 		--secondary-foreground: oklch(0.985 0 0);
 		--muted: oklch(0.269 0 0);
 		--muted-foreground: oklch(0.708 0 0);
-		--accent: oklch(0.269 0 0);
+		--accent: oklch(0.3 0.04 150);
 		--accent-foreground: oklch(0.985 0 0);
 		--destructive: oklch(0.704 0.191 22.216);
 		--border: oklch(1 0 0 / 10%);
 		--input: oklch(1 0 0 / 15%);
-		--ring: oklch(0.556 0 0);
+		--ring: oklch(0.55 0.12 150);
+		/* Auf fast schwarzem Grund sieht man keinen Schatten -- dort eine feine Kante. */
+		--shadow-soft: 0 0 0 1px oklch(1 0 0 / 10%);
 	}
 }
 
@@ -103,4 +108,72 @@
 
 @utility safe-b {
 	padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Listenflaeche: Karte mit weichem Schatten statt Rahmen. */
+@utility surface {
+	overflow: hidden;
+	border-radius: var(--radius-xl);
+	background-color: var(--color-card);
+	box-shadow: var(--shadow-soft);
+}
+
+/* Bewusst ausserhalb jeder Layer: so schlaegt es die Utilities der generierten
+   shadcn-Komponenten, ohne dass deren Dateien angefasst werden. */
+[data-slot='card'] {
+	box-shadow: var(--shadow-soft);
+}
+
+/* Durchgestrichener Eintrag. Ein Hintergrundstrich statt line-through, damit
+   er sich von links nach rechts ziehen laesst. */
+.strike {
+	background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0 1.5px;
+}
+.strike.struck {
+	background-size: 100% 1.5px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.strike {
+		transition: background-size 300ms cubic-bezier(0.65, 0, 0.35, 1);
+	}
+
+	/* Knoepfe geben beim Druecken etwas nach. */
+	[data-slot='button']:active:not(:disabled) {
+		scale: 0.96;
+	}
+
+	/* Der Haken springt kurz auf, wenn er gesetzt wird. */
+	[data-slot='checkbox-indicator'] > svg {
+		animation: check-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+
+	/* Seitenwechsel (onNavigate in +layout.svelte): kurz ueberblenden, die neue
+	   Seite rueckt dabei ein Stueck nach oben. Die Topbar bleibt stehen. */
+	::view-transition-old(root) {
+		animation: 200ms cubic-bezier(0.4, 0, 1, 1) both page-out;
+	}
+	::view-transition-new(root) {
+		animation: 340ms cubic-bezier(0.22, 1, 0.36, 1) both page-in;
+	}
+}
+
+@keyframes check-pop {
+	from {
+		scale: 0.5;
+		opacity: 0;
+	}
+}
+
+@keyframes page-out {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes page-in {
+	from {
+		opacity: 0;
+		translate: 0 8px;
+	}
 }

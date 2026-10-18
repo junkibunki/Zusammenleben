@@ -1,6 +1,6 @@
 <script>
 	import '../app.css';
-	import { goto } from '$app/navigation';
+	import { goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { auth } from '$lib/pocketbase.svelte.js';
 	import { households, syncHouseholds } from '$lib/households.svelte.js';
@@ -21,6 +21,19 @@
 	// Nur die ID, nicht `auth.user`: der Record wird bei jedem Profil-Update neu
 	// gesetzt, und der Effekt soll dann nicht die Haushalte neu laden.
 	const userId = $derived(auth.valid ? (auth.user?.id ?? '') : '');
+
+	// Seitenwechsel per View Transitions API ueberblenden (Animation in app.css).
+	// Ohne Unterstuetzung oder bei "Bewegung reduzieren" wechselt die Seite hart.
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return;
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
+	});
 
 	$effect(() => {
 		if (!auth.valid && !onLogin) goto('/login', { replaceState: true });

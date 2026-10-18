@@ -21,7 +21,7 @@
 		{households.list.length}
 		{households.list.length === 1 ? 'Haushalt' : 'Haushalte'}
 	</p>
-	<ul class="bg-card divide-y overflow-hidden rounded-lg border" role="radiogroup" aria-label="Aktiver Haushalt">
+	<ul class="surface divide-y" role="radiogroup" aria-label="Aktiver Haushalt">
 		{#each households.list as h (h.id)}
 			{@const active = h.id === households.activeId}
 			{@const note = guestNote(h)}

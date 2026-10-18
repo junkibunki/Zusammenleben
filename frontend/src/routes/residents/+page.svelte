@@ -98,7 +98,7 @@
 			{household?.name ?? ''} · {sorted.length}
 			{sorted.length === 1 ? 'Person' : 'Personen'}
 		</p>
-		<ul class="bg-card divide-y overflow-hidden rounded-lg border">
+		<ul class="surface divide-y">
 			{#each sorted as user (user.id)}
 				{@const photo = avatarUrl(user)}
 				{@const label = userLabel(user)}

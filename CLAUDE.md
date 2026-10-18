@@ -108,6 +108,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── training.svelte.js    # privater Trainingsplan: Tage, Uebungen, Gewichte
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
+│       │   ├── motion.js             # Listen-Transitions enter/leave, reducedMotion()
+│       │   ├── memory.js             # Artikel-Gedaechtnis (localStorage): Kategorie, Vorschlaege
 │       │   ├── components/ui/        # shadcn-svelte, CLI-Output (nicht haendisch pflegen)
 │       │   ├── Dragon.svelte         # Pixelsprite als Zeichenraster + Flug-Animation
 │       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)

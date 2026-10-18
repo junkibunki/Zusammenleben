@@ -152,7 +152,7 @@
 			Noch keine Ideen. Fang an. 💡
 		</p>
 	{:else}
-		<ul class="bg-card divide-y overflow-hidden rounded-lg border">
+		<ul class="surface divide-y">
 			{#each sorted as idea (idea.id)}
 				{@const photo = avatarUrl(idea.expand?.author)}
 				{@const author = userLabel(idea.expand?.author)}
