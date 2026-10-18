@@ -73,6 +73,13 @@ ein `echo "y" |` davor, sonst bricht es mit „The command has been cancelled" a
 
 ## API-Rules
 
+**Eine Mehrfach-Relation über `@collection` braucht `.id`.** Symptom: die Rule speichert
+ohne Fehler, greift aber nie — `expand` bleibt leer, der Einzelabruf liefert 404.
+`@collection.training_posts.kudos ?= id` (kudos = Relation mit `maxSelect` > 1) trifft
+nicht; `@collection.training_posts.kudos.id ?= id` (oder `kudos:each ?= id`) schon. Bei
+einer Einfach-Relation genügt das Feld allein (`@collection.ideas.author ?= id`). Gemessen
+an `1789909201`: A ruft B ab, der bei A auf die Schulter geklopft hat → 404 bzw. 200.
+
 `expand` kommt leer zurück, wenn die View-Rule der Zielcollection zumacht — Details in
 [Realtime / PocketBase-SDK](../../CLAUDE.md#realtime--pocketbase-sdk). Für `users`
 öffnet `1756000002` die ViewRule, `1756000004` die ListRule (die Seite „Bewohner"

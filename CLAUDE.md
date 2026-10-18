@@ -108,6 +108,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── training.svelte.js    # privater Trainingsplan: Tage, Uebungen, Saetze,
 │       │   │                         # Dauer, Koerpergewicht, CSV-Export
 │       │   ├── training-timer.svelte.js # Satzpause + Stoppuhr (localStorage)
+│       │   ├── training-feed.svelte.js # app-weiter Feed + Schulterklopfer + Realtime
 │       │   ├── TrainingChart.svelte  # SVG-Linie fuer Verlauf und Koerpergewicht
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
@@ -126,7 +127,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # Salden, wer-schuldet-wem), profile/,
 │                                  # wuensche/ (Wuensch dir was: eigene Wuensche
 │                                  # sind unsichtbar, nur gezaehlt), training/
-│                                  # (Saetze eintragen, Entry*; kalender/,
+│                                  # (Saetze eintragen, Entry*; kalender/, feed/,
 │                                  # koerpergewicht/, uebung/[id]/ = Verlauf;
 │                                  # einstellungen/ = Trainings, Uebungen, Tage,
 │                                  # Export; privat, im Menue nur mit

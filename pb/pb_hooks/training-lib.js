@@ -225,4 +225,142 @@ function sendDueReminders(app, now) {
 	return sent;
 }
 
-module.exports = { berlin, sendDueReminders, normalizeLog };
+// --- Feed (Migration 1789909200) --------------------------------------------
+
+/** Die Saetze eines Eintrags als Liste; Unlesbares ergibt []. */
+function parseSets(log) {
+	try {
+		const sets = JSON.parse(log.getString('sets') || '[]');
+		return Array.isArray(sets) ? sets : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Den Feed-Beitrag von `userId` fuer `date` neu berechnen. Laeuft nach jeder
+ * Aenderung an Eintraegen oder Dauer des Tages. Nur Kennzahlen, keine Gewichte.
+ *
+ * Ist der Feed fuer die Person aus, entstehen keine neuen Beitraege (alte
+ * blendet die Rule aus); ein vorhandener wird aber weiter nachgezogen, damit
+ * nach dem Wiedereinschalten nichts Geloeschtes auftaucht. Ist an dem Tag
+ * nichts mehr trainiert, verschwindet der Beitrag samt Schulterklopfern.
+ */
+function rebuildPost(app, userId, date) {
+	let user;
+	try {
+		user = app.findRecordById('users', userId);
+	} catch {
+		return;
+	}
+
+	const params = { uid: userId, d: date };
+	let existing = null;
+	try {
+		existing = app.findFirstRecordByFilter('training_posts', 'user = {:uid} && date = {:d}', params);
+	} catch {
+		// Noch keiner.
+	}
+	if (!existing && !user.getBool('training_public')) return;
+
+	const logs = app.findRecordsByFilter('training_logs', 'user = {:uid} && date = {:d}', '', 200, 0, params);
+	const sessions = app.findRecordsByFilter('training_sessions', 'user = {:uid} && date = {:d}', '', 1, 0, params);
+	const session = sessions.length > 0 ? sessions[0] : null;
+	const duration = session ? session.getInt('duration') : 0;
+
+	const counts = {};
+	const records = [];
+	let exercises = 0;
+	let sets = 0;
+	for (let i = 0; i < logs.length; i++) {
+		const log = logs[i];
+		const list = parseSets(log);
+		let working = 0;
+		for (let j = 0; j < list.length; j++) if (!(list[j] && list[j].warmup)) working++;
+		if (working === 0) continue; // nur Notiz oder nur Aufwaermen
+		exercises++;
+		sets += working;
+
+		let exercise = null;
+		try {
+			exercise = app.findRecordById('training_exercises', log.getString('exercise'));
+		} catch {
+			continue;
+		}
+		const w = exercise.getString('workout');
+		counts[w] = (counts[w] || 0) + 1;
+
+		// Neuer Bestwert: schwerer als alles davor -- der erste Eintrag zaehlt nicht.
+		const weight = log.getFloat('weight');
+		if (weight > 0) {
+			const before = app.findRecordsByFilter(
+				'training_logs',
+				'exercise = {:e} && date < {:d} && weight > 0',
+				'-weight',
+				1,
+				0,
+				{ e: exercise.id, d: date }
+			);
+			if (before.length > 0 && weight > before[0].getFloat('weight')) records.push(exercise.getString('name'));
+		}
+	}
+
+	if (exercises === 0 && duration === 0) {
+		if (existing) app.delete(existing);
+		return;
+	}
+
+	if (session && session.getString('workout') && !(session.getString('workout') in counts)) {
+		counts[session.getString('workout')] = 0;
+	}
+	const names = Object.keys(counts)
+		.sort((a, b) => counts[b] - counts[a])
+		.map((id) => {
+			try {
+				return app.findRecordById('training_workouts', id).getString('name');
+			} catch {
+				return '';
+			}
+		})
+		.filter((n) => n);
+
+	const post = existing || new Record(app.findCollectionByNameOrId('training_posts'));
+	post.set('user', userId);
+	post.set('date', date);
+	post.set('workout', names.join(' + ').slice(0, 200));
+	post.set('duration', Math.min(86400, duration));
+	post.set('exercises', exercises);
+	post.set('sets', sets);
+	post.set('records', records);
+	app.save(post);
+}
+
+/** Push an den Besitzer eines Beitrags: `fromId` hat auf die Schulter geklopft. */
+function notifyKudos(app, post, fromId) {
+	const pushLib = require(`${__hooks}/push-lib.js`);
+	const owner = post.getString('user');
+	const subscriptions = app.findRecordsByFilter('push_subscriptions', 'user = {:uid}', '-created', 50, 0, {
+		uid: owner
+	});
+	if (subscriptions.length === 0) return 0;
+	// Nur der Name, nie der E-Mail-Fallback von pushLib.userLabel: der Klopfer
+	// kann aus einem anderen Haushalt kommen, und im Feed steht dann auch nur
+	// "Jemand".
+	let who = '';
+	try {
+		who = app.findRecordById('users', fromId).getString('name').trim();
+	} catch {
+		// Account weg.
+	}
+	who = who || 'Jemand';
+	const what = post.getString('workout');
+	return pushLib.broadcast(app, subscriptions, {
+		title: 'Schulterklopfer',
+		body: what ? `${who} klopft dir auf die Schulter – für ${what}.` : `${who} klopft dir auf die Schulter.`,
+		// Pro Beitrag und Person: eine Wiederholung ergibt keine zweite Meldung.
+		tag: `einkauf-kudos-${post.id}-${fromId}`,
+		url: '/training/feed'
+	});
+}
+
+module.exports = { berlin, sendDueReminders, normalizeLog, rebuildPost, notifyKudos };

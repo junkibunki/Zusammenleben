@@ -359,4 +359,4 @@ function notifyNewExpense(app, record, actorId) {
 	});
 }
 
-module.exports = { vapid, publicKey, broadcast, sendTest, notifyNewItem, notifyNewExpense };
+module.exports = { vapid, publicKey, broadcast, sendTest, notifyNewItem, notifyNewExpense, userLabel };

@@ -34,7 +34,7 @@
 				? 'Haushalte'
 				: page.url.pathname === '/einstellungen'
 					? 'Haushalt-Einstellungen'
-					: page.url.pathname === '/training' || page.url.pathname === '/training/kalender'
+					: ['/training', '/training/kalender', '/training/feed'].includes(page.url.pathname)
 						? 'Training'
 						: page.url.pathname === '/training/einstellungen'
 							? 'Training einrichten'

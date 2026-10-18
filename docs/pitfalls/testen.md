@@ -38,6 +38,18 @@ Muss **genau einen** Namen ausgeben. Heilmittel ist ein erneutes `build.sh`.
   ungültig — jeder Request läuft in ein 401. Einmal abmelden, neu anmelden.
 * Testdaten liegen in `pb/pb_data/` — zum Zurücksetzen den Ordner löschen und den
   Superuser neu anlegen.
+* **Eine Rule per API ausprobieren schreibt eine Migration ins Repo.** Symptom: eine
+  korrigierte Rule kommt beim nächsten Start in der alten Form zurück, und in
+  `pb/pb_migrations/` liegt eine fremde Datei `<zeitstempel>_updated_users.js` (Zeitstempel
+  in der Zukunft der übrigen Nummern). Ursache: `serve` mit `--migrationsDir
+  pb/pb_migrations` hat Automigrate an — jede Collection-Änderung über die API (auch auf
+  einer Datenkopie) wird als Migration gespeichert und läuft dann überall. Für solche
+  Experimente `--automigrate=false` mitgeben oder ein Wegwerf-`--migrationsDir` nehmen,
+  und hinterher `git status pb/pb_migrations` ansehen.
+* **Eine Datenkopie zeigt Migrationen schon als gelaufen, die du gerade erst schreibst.**
+  Läuft irgendwo ein Server auf `pb/pb_data` (eigener Test, parallele Session), wendet er
+  jede neue Datei in `pb_migrations/` sofort an. Eine danach korrigierte Migration läuft
+  dort nie wieder — Korrekturen gehören dann in eine neue Migration.
 
 ## Browser
 

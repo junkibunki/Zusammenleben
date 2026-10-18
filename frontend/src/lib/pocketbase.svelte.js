@@ -66,6 +66,17 @@ export async function updateProfile({ name, avatar } = {}) {
 	return record;
 }
 
+/**
+ * Eigene Trainings im Feed zeigen (`users.training_public`). Gilt fuer neue
+ * Beitraege; ausgeschaltet sind auch die vorhandenen fuer andere unsichtbar.
+ */
+export async function setTrainingPublic(value) {
+	const me = pb.authStore.record;
+	if (!me) throw new Error('Nicht angemeldet');
+	const record = await pb.collection('users').update(me.id, { training_public: Boolean(value) });
+	pb.authStore.save(pb.authStore.token, record);
+}
+
 /** Ob "Training" im Menue steht (`users.show_training`, Migration 1789650001). */
 export async function setShowTraining(value) {
 	const me = pb.authStore.record;

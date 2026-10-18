@@ -2,17 +2,21 @@
 	import { page } from '$app/state';
 
 	// Umschalter zwischen den Trainingsseiten; die Einstellungen haengen am
-	// Zahnrad der Eintragsseite, der Verlauf einer Uebung an ihrem Namen.
+	// Zahnrad der Eintragsseite, der Verlauf einer Uebung an ihrem Namen, das
+	// Koerpergewicht am gewaehlten Tag im Kalender.
 	const TABS = [
 		{ href: '/training', label: 'Eintragen' },
 		{ href: '/training/kalender', label: 'Kalender' },
-		{ href: '/training/koerpergewicht', label: 'Körpergewicht' }
+		{ href: '/training/feed', label: 'Feed' }
 	];
 </script>
 
 <nav aria-label="Training" class="bg-muted grid grid-cols-3 gap-1 rounded-lg p-1">
 	{#each TABS as tab (tab.href)}
-		{@const active = page.url.pathname === tab.href}
+		<!-- Der Koerpergewicht-Verlauf haengt am Kalender. -->
+		{@const active =
+			page.url.pathname === tab.href ||
+			(tab.href === '/training/kalender' && page.url.pathname === '/training/koerpergewicht')}
 		<a
 			href={tab.href}
 			aria-current={active ? 'page' : undefined}

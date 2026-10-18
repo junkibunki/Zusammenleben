@@ -5,7 +5,7 @@
 	import AlertCircleIcon from '@lucide/svelte/icons/circle-alert';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import BellOffIcon from '@lucide/svelte/icons/bell-off';
-	import { auth, avatarUrl, updateProfile, setShowTraining } from '$lib/pocketbase.svelte.js';
+	import { auth, avatarUrl, updateProfile, setShowTraining, setTrainingPublic } from '$lib/pocketbase.svelte.js';
 	import { setQuickNav } from '$lib/pocketbase.svelte.js';
 	import { navLinks, quickPaths, QUICK_MAX } from '$lib/nav-links.svelte.js';
 	import { push, refreshPush, enablePush, disablePush, sendTestPush } from '$lib/push.svelte.js';
@@ -35,6 +35,22 @@
 			await setShowTraining(value);
 		} catch (err) {
 			showTraining = !value;
+			menuError = err?.message ?? 'Speichern fehlgeschlagen';
+		} finally {
+			menuBusy = false;
+		}
+	}
+
+	// Eigene Trainings im Feed (`users.training_public`), genauso sofort gespeichert.
+	let trainingPublic = $state(Boolean(auth.user?.training_public));
+
+	async function togglePublic(value) {
+		menuBusy = true;
+		menuError = '';
+		try {
+			await setTrainingPublic(value);
+		} catch (err) {
+			trainingPublic = !value;
 			menuError = err?.message ?? 'Speichern fehlgeschlagen';
 		} finally {
 			menuBusy = false;
@@ -329,6 +345,25 @@
 				Dein eigener Trainingsplan mit Erinnerung an den Trainingstagen. Ausgeschaltet kommen auch
 				keine Erinnerungen.
 			</p>
+
+			<!-- Auch ohne Training im Menue erreichbar, solange der Feed noch an ist --
+			     sonst liesse er sich nicht mehr abschalten. -->
+			{#if showTraining || trainingPublic}
+				<div class="flex min-h-11 items-center gap-3">
+					<Checkbox
+						id="training-public"
+						bind:checked={trainingPublic}
+						disabled={menuBusy}
+						onCheckedChange={togglePublic}
+					/>
+					<Label for="training-public" class="flex-1 py-3">Trainings im Feed zeigen</Label>
+				</div>
+				<p class="text-muted-foreground -mt-2 text-sm">
+					Alle in der App sehen dann, wann du trainiert hast: Training, Dauer, Zahl der Übungen und
+					Sätze und neue Bestwerte – keine Gewichte. Gilt ab dem nächsten Eintrag; ausgeschaltet
+					verschwinden auch deine bisherigen Beiträge aus dem Feed.
+				</p>
+			{/if}
 
 			{#if menuError}
 				<Alert.Root variant="destructive">
