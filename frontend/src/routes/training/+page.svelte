@@ -41,6 +41,7 @@
 	import TrainingTabs from './TrainingTabs.svelte';
 	import EntryExercise from './EntryExercise.svelte';
 	import EntryRestTimer from './EntryRestTimer.svelte';
+	import EntryCheer, { makeCheer } from './EntryCheer.svelte';
 	import {
 		draftFrom,
 		savedEntry,
@@ -81,6 +82,8 @@
 	let error = $state(null);
 	let saved = $state(false);
 	let watchBusy = $state(false);
+	/** Jubel nach dem Speichern (EntryCheer), null = keiner. */
+	let cheer = $state(null);
 
 	// Kommt man ueber einen anderen Link auf dieselbe Seite (Kalender, Tab),
 	// gilt dessen Datum. `lastQuery` ist bewusst kein $state.
@@ -231,6 +234,7 @@
 			await saveDay(date, entries);
 			writeDrafts(key, null);
 			saved = true;
+			cheer = makeCheer();
 		} catch (err) {
 			error = trainingError(err, 'Speichern fehlgeschlagen');
 			// Was durchging, ist nicht mehr dirty; der Rest bleibt gesichert.
@@ -494,3 +498,4 @@
 </main>
 
 <EntryRestTimer />
+<EntryCheer {cheer} onclose={() => (cheer = null)} />
