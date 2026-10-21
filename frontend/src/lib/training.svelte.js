@@ -471,9 +471,11 @@ export async function saveDay(date, entries) {
 			const idx = training.logs.findIndex((l) => l.id === existing.id);
 			if (idx > -1) training.logs[idx] = record;
 		} else {
+			// requestKey: null -- die Creates laufen parallel auf derselben URL, und die
+			// Auto-Cancellation des SDK bricht sonst alle bis auf den letzten ab.
 			const record = await pb
 				.collection('training_logs')
-				.create({ user, exercise, date, sets, note });
+				.create({ user, exercise, date, sets, note }, { requestKey: null });
 			if (!training.logs.some((l) => l.id === record.id)) training.logs.push(record);
 		}
 	});
