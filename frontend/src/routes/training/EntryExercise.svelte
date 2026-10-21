@@ -19,9 +19,11 @@
 		suggestion,
 		SETS_MAX,
 		NOTE_MAX,
-		DEFAULT_INCREMENT
+		DEFAULT_INCREMENT,
+		sessionFor,
+		today
 	} from '$lib/training.svelte.js';
-	import { startRest } from '$lib/training-timer.svelte.js';
+	import { timer, startRest, startWatch } from '$lib/training-timer.svelte.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -106,6 +108,10 @@
 		row.done = true;
 		changed();
 		if (exercise.rest > 0) startRest(exercise.rest);
+		// "Training starten" vergessen: ein Haken von heute startet die Stoppuhr --
+		// aber nicht mehr nach "Beenden" (dann steht schon eine Dauer). Ein zweites
+		// Training am Tag startet man von Hand.
+		if (!timer.watch && date === today() && !sessionFor(date)) startWatch(date, exercise.workout);
 	}
 
 	function sameAsLast() {
