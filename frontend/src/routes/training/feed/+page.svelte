@@ -2,6 +2,7 @@
 	import AlertCircleIcon from '@lucide/svelte/icons/alert-circle';
 	import HandIcon from '@lucide/svelte/icons/hand';
 	import TimerIcon from '@lucide/svelte/icons/timer';
+	import DumbbellIcon from '@lucide/svelte/icons/dumbbell';
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
@@ -124,6 +125,13 @@
 								{#if post.exercises > 0}
 									<span>{post.exercises} {post.exercises === 1 ? 'Übung' : 'Übungen'}</span>
 									<span>{post.sets} {post.sets === 1 ? 'Satz' : 'Sätze'}</span>
+								{/if}
+								{#if post.volume > 0}
+									<span class="inline-flex items-center gap-1">
+										<DumbbellIcon class="size-4" />
+										<span class="tabular-nums">{post.volume.toLocaleString('de-DE')} kg</span>
+										Volumen
+									</span>
 								{/if}
 							</p>
 							{#if post.records?.length}

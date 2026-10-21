@@ -239,7 +239,8 @@ function parseSets(log) {
 
 /**
  * Den Feed-Beitrag von `userId` fuer `date` neu berechnen. Laeuft nach jeder
- * Aenderung an Eintraegen oder Dauer des Tages. Nur Kennzahlen, keine Gewichte.
+ * Aenderung an Eintraegen oder Dauer des Tages. Nur Kennzahlen, keine
+ * einzelnen Gewichte -- das Volumen ist eine Summe (Migration 1790168400).
  *
  * Ist der Feed fuer die Person aus, entstehen keine neuen Beitraege (alte
  * blendet die Rule aus); ein vorhandener wird aber weiter nachgezogen, damit
@@ -272,11 +273,18 @@ function rebuildPost(app, userId, date) {
 	const records = [];
 	let exercises = 0;
 	let sets = 0;
+	let volume = 0;
 	for (let i = 0; i < logs.length; i++) {
 		const log = logs[i];
 		const list = parseSets(log);
 		let working = 0;
-		for (let j = 0; j < list.length; j++) if (!(list[j] && list[j].warmup)) working++;
+		for (let j = 0; j < list.length; j++) {
+			const s = list[j];
+			if (s && s.warmup) continue;
+			working++;
+			// Wie `volumeOf` im Frontend; Zeitsaetze haben keine Wdh. und zaehlen 0.
+			if (s) volume += (Number(s.weight) || 0) * (Number(s.reps) || 0);
+		}
 		if (working === 0) continue; // nur Notiz oder nur Aufwaermen
 		exercises++;
 		sets += working;
@@ -331,6 +339,7 @@ function rebuildPost(app, userId, date) {
 	post.set('duration', Math.min(86400, duration));
 	post.set('exercises', exercises);
 	post.set('sets', sets);
+	post.set('volume', Math.round(volume));
 	post.set('records', records);
 	app.save(post);
 }
