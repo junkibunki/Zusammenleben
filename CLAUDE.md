@@ -119,7 +119,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── swipe.js              # Action: Zeile nach links wischen -> Loeschen-Knopf / loeschen
 │       │   ├── memory.js             # Artikel-Gedaechtnis (localStorage): Kategorie, Vorschlaege
 │       │   ├── components/ui/        # shadcn-svelte, CLI-Output (nicht haendisch pflegen)
-│       │   ├── Dragon.svelte         # Pixelsprite als Zeichenraster + Flug-Animation
+│       │   ├── DragonSprite.svelte   # Pixelsprite als Zeichenraster + Fluegelschlag
+│       │   ├── Dragon.svelte         # Osterei-Flug quer durchs Bild (nutzt das Sprite)
 │       │   └── Nav.svelte            # Topbar + Burgermenue (Sheet)
 │       └── routes/                # +layout.js (ssr=false), +layout.svelte (Guard +
 │                                  # Rahmen mit Nav), +page.svelte (Liste),

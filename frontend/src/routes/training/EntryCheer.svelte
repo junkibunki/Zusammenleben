@@ -22,9 +22,11 @@
 	import { scale } from 'svelte/transition';
 	import { backOut } from 'svelte/easing';
 	import { reducedMotion } from '$lib/motion.js';
+	import DragonSprite from '$lib/DragonSprite.svelte';
 
 	// Jubel nach "Training speichern": kurz einblenden, nach ein paar Sekunden
-	// oder per Tipp weg. Konfetti nur ohne prefers-reduced-motion (CSS unten).
+	// oder per Tipp weg. Konfetti und der Drache mit Looping nur ohne
+	// prefers-reduced-motion (CSS unten).
 	let { cheer, onclose } = $props();
 
 	const SHOW_MS = 4500;
@@ -80,6 +82,14 @@
 				<p class="text-xl font-semibold">{cheer.title}</p>
 				<p class="text-muted-foreground">{cheer.line}</p>
 			</div>
+			<!-- Der Drache fliegt von links durchs Bild, dreht ueber der Karte einen
+			     Looping und verschwindet rechts. Nach der Karte im DOM, damit er
+			     ueber ihr liegt. -->
+			<div class="dragon pointer-events-none absolute left-0" aria-hidden="true">
+				<div class="loop">
+					<DragonSprite />
+				</div>
+			</div>
 		</div>
 	{/key}
 {/if}
@@ -95,6 +105,63 @@
 	@media (prefers-reduced-motion: no-preference) {
 		.confetti span {
 			animation: fall 2.4s ease-in forwards;
+		}
+	}
+
+	/* Der Flug ist zwei Transformationen: `.dragon` schiebt quer durchs Bild,
+	   `.loop` dreht das Sprite um einen Punkt ueber ihm. Weil der Drehpunkt
+	   ueber dem Drachen liegt, beschreibt er dabei einen Kreis *und* zeigt mit
+	   der Nase immer in Flugrichtung -- genau ein Looping. Waehrend des Loopings
+	   bremst die Querfahrt fast ab, sonst wuerde der Kreis zur Welle gezogen. */
+	/* Der Scheitel des Loopings liegt 56 px (Drehpunkt) + 80 px (sichtbare
+	   Spritehoehe) + 56 px (Radius) = 192 px ueber der Flugbahn. Auf einem
+	   kurzen Viewport (iPhone SE in Safari: 553 px) waeren 27 % zu wenig,
+	   deshalb die Untergrenze. */
+	.dragon {
+		top: max(27%, 12.5rem);
+		opacity: 0;
+	}
+
+	.loop {
+		transform-origin: 50% -56px;
+	}
+
+	@media (prefers-reduced-motion: no-preference) {
+		.dragon {
+			opacity: 1;
+			will-change: transform;
+			animation: cross 4.2s linear forwards;
+		}
+
+		.loop {
+			animation: loop 4.2s linear forwards;
+		}
+	}
+
+	@keyframes cross {
+		0% {
+			transform: translate3d(-30vw, 0, 0);
+		}
+		35% {
+			transform: translate3d(calc(50vw - 100px), 0, 0);
+		}
+		65% {
+			transform: translate3d(calc(50vw - 20px), 0, 0);
+		}
+		100% {
+			transform: translate3d(115vw, 0, 0);
+		}
+	}
+
+	@keyframes loop {
+		0%,
+		35% {
+			transform: rotate(0deg);
+			animation-timing-function: ease-in-out;
+		}
+		65%,
+		100% {
+			transform: rotate(-360deg);
 		}
 	}
 
