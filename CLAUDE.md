@@ -115,6 +115,7 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │       │   ├── easteregg.svelte.js   # Osterei: 5%-Wurf, Tippzaehler, Flugzustand
 │       │   ├── utils.js              # cn() = clsx + tailwind-merge
 │       │   ├── motion.js             # Listen-Transitions enter/leave, reducedMotion()
+│       │   ├── swipe.js              # Action: Zeile nach links wischen -> Loeschen-Knopf / loeschen
 │       │   ├── memory.js             # Artikel-Gedaechtnis (localStorage): Kategorie, Vorschlaege
 │       │   ├── components/ui/        # shadcn-svelte, CLI-Output (nicht haendisch pflegen)
 │       │   ├── Dragon.svelte         # Pixelsprite als Zeichenraster + Flug-Animation

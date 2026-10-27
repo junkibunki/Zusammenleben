@@ -28,6 +28,7 @@
 	import { slide } from 'svelte/transition';
 	import { learn, memoryKey } from '$lib/memory.js';
 	import { enter, leave, reducedMotion } from '$lib/motion.js';
+	import { swipe } from '$lib/swipe.js';
 
 	// Nach dem eigenen Abhaken bleibt die Zeile kurz in ihrer bisherigen Liste
 	// stehen und wird dort durchgestrichen (bzw. der Strich verschwindet), erst
@@ -83,6 +84,33 @@
 	// name (klein) -> { name, category, count, last }, siehe memory.js.
 	let memory = $state({});
 	let showDone = $state(false);
+	// Zeile, die nach links geschoben ihren Loeschen-Knopf zeigt -- hoechstens
+	// eine. Loeschen gibt es nur so: kurz wischen und tippen, oder weit wischen.
+	// Beim Loeschen bleibt openId bewusst stehen: ein settle(0) wuerde die
+	// Zeile waehrend ihrer leave-Transition zurueck ueber den Knopf schieben.
+	// Schlaegt das Loeschen fehl, kommt sie offen zurueck; sonst raeumt der
+	// naechste Tipp auf.
+	let openId = $state(null);
+	// Ein Tipp irgendwo sonst schiebt die offene Zeile zu. Trifft er eine
+	// andere Zeile, soll er nur das tun und sie nicht auch noch abhaken.
+	let swallowClick = false;
+
+	function closeOpen(e) {
+		swallowClick = false;
+		if (!openId || e.target.closest?.('[data-swipe-open]')) return;
+		// Zeigt openId auf eine inzwischen geloeschte Zeile, gab es nichts zu
+		// schliessen -- der Tipp gilt ganz normal.
+		const wasOpen = store.items.some((i) => i.id === openId);
+		openId = null;
+		swallowClick = wasOpen && !!e.target.closest?.('[data-swipe-row]');
+	}
+
+	function swallow(e) {
+		if (!swallowClick) return;
+		swallowClick = false;
+		e.stopPropagation();
+		e.preventDefault();
+	}
 
 	// Laden + Realtime-Subscription; Teardown beim Verlassen der Seite.
 	$effect(() => {
@@ -283,6 +311,8 @@
 	</div>
 {/if}
 
+<svelte:window onpointerdown={closeOpen} onclickcapture={swallow} />
+
 <main class="flex-1 px-3 pt-3 pb-8">
 	{#if loading}
 		<p class="text-muted-foreground py-12 text-center text-sm">Lade …</p>
@@ -305,80 +335,101 @@
 
 		{#snippet row(item)}
 			{@const meta = metaFor(item)}
-			<div
-				class="flex items-center gap-3 pr-1 pl-3 transition-opacity duration-300"
-				class:opacity-60={item.done}
-			>
-				<Checkbox
-					checked={item.done}
-					onCheckedChange={() => toggle(item)}
-					aria-label={item.name}
-				/>
-				<!-- Der Zeilentext unten liegt in einem aria-hidden-Bereich, ist also
-				     nur fuer das Auge da. Ohne diese Kopie waere die Beschreibung per
-				     Screenreader aus der Liste heraus gar nicht zu erreichen. Sie muss
-				     ausserhalb des Buttons stehen -- aria-hidden erbt nach unten. -->
-				{#if item.note}
-					<span class="sr-only">Beschreibung: {item.note}</span>
-				{/if}
-				<!-- Die ganze Zeile soll antippbar bleiben; die Checkbox traegt den
-				     zugaenglichen Namen, dieser Bereich ist nur der Trefferbereich.
-				     Das senkrechte Padding sitzt hier drin, damit es mitzaehlt. -->
-				<button
-					type="button"
-					class="min-w-0 flex-1 py-3 text-left"
-					tabindex="-1"
-					aria-hidden="true"
-					onclick={() => toggle(item)}
+			<div class="relative" data-swipe-row data-swipe-open={openId === item.id ? '' : undefined}>
+				<!-- Liegt hinter der Zeile und wird erst durch Wischen frei; bis dahin
+				     fuer Tastatur und Screenreader unsichtbar. -->
+				<div
+					class="bg-destructive absolute inset-0 flex justify-end text-white"
+					aria-hidden={openId !== item.id}
 				>
-					<span class="block truncate">
-						<span class="strike" class:struck={item.done}
-							>{item.name}{#if item.quantity}<span class="text-muted-foreground">
-									· {item.quantity}</span
-								>{/if}</span
+					<button
+						type="button"
+						class="flex w-22 items-center justify-center active:bg-black/15"
+						tabindex={openId === item.id ? 0 : -1}
+						aria-label="{item.name} löschen"
+						onclick={() => deleteItem(item)}
+					>
+						<Trash2Icon class="size-5 transition-transform [[data-far]_&]:scale-125" />
+					</button>
+				</div>
+				<!-- Die Deckkraft sitzt eine Ebene tiefer: die geschobene Zeile selbst
+				     muss deckend bleiben, sonst scheint der rote Knopf durch. -->
+				<div
+					class="bg-card relative touch-pan-y select-none"
+					use:swipe={{
+						open: openId === item.id,
+						onopen: () => (openId = item.id),
+						onclose: () => (openId = null),
+						ondelete: () => deleteItem(item)
+					}}
+				>
+					<div
+						class="flex items-center gap-3 pr-1 pl-3 transition-opacity duration-300"
+						class:opacity-60={item.done}
+					>
+						<Checkbox
+							checked={item.done}
+							onCheckedChange={() => toggle(item)}
+							aria-label={item.name}
+						/>
+						<!-- Der Zeilentext unten liegt in einem aria-hidden-Bereich, ist also
+						     nur fuer das Auge da. Ohne diese Kopie waere die Beschreibung per
+						     Screenreader aus der Liste heraus gar nicht zu erreichen. Sie muss
+						     ausserhalb des Buttons stehen -- aria-hidden erbt nach unten. -->
+						{#if item.note}
+							<span class="sr-only">Beschreibung: {item.note}</span>
+						{/if}
+						<!-- Die ganze Zeile soll antippbar bleiben; die Checkbox traegt den
+						     zugaenglichen Namen, dieser Bereich ist nur der Trefferbereich.
+						     Das senkrechte Padding sitzt hier drin, damit es mitzaehlt. -->
+						<button
+							type="button"
+							class="min-w-0 flex-1 py-3 text-left"
+							tabindex="-1"
+							aria-hidden="true"
+							onclick={() => toggle(item)}
 						>
-					</span>
-					{#if item.note}
-						<!-- line-clamp-2 setzt display:-webkit-box, deshalb kein "block";
-						     whitespace-pre-line laesst eigene Zeilenumbrueche zaehlen. -->
-						<span class="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line"
-							>{item.note}</span
+							<span class="block truncate">
+								<span class="strike" class:struck={item.done}
+									>{item.name}{#if item.quantity}<span class="text-muted-foreground">
+											· {item.quantity}</span
+										>{/if}</span
+								>
+							</span>
+							{#if item.note}
+								<!-- line-clamp-2 setzt display:-webkit-box, deshalb kein "block";
+								     whitespace-pre-line laesst eigene Zeilenumbrueche zaehlen. -->
+								<span class="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line"
+									>{item.note}</span
+								>
+							{/if}
+							{#if meta.lead || meta.buyer}
+								<span class="text-muted-foreground mt-0.5 flex min-w-0 items-center gap-1 text-xs">
+									{#if userLabel(meta.addedBy)}
+										{@render face(meta.addedBy)}
+									{/if}
+									{#if meta.lead}
+										<span class="truncate">{meta.lead}</span>
+									{/if}
+									{#if meta.buyer}
+										<span class="shrink-0">{meta.lead ? '· ' : ''}gekauft von</span>
+										{@render face(meta.doneBy)}
+										<span class="truncate">{meta.buyer}</span>
+									{/if}
+								</span>
+							{/if}
+						</button>
+						<Button
+							variant="ghost"
+							size="icon"
+							class="text-muted-foreground size-11 shrink-0"
+							aria-label="{item.name} bearbeiten"
+							href="/items/{item.id}"
 						>
-					{/if}
-					{#if meta.lead || meta.buyer}
-						<span class="text-muted-foreground mt-0.5 flex min-w-0 items-center gap-1 text-xs">
-							{#if userLabel(meta.addedBy)}
-								{@render face(meta.addedBy)}
-							{/if}
-							{#if meta.lead}
-								<span class="truncate">{meta.lead}</span>
-							{/if}
-							{#if meta.buyer}
-								<span class="shrink-0">{meta.lead ? '· ' : ''}gekauft von</span>
-								{@render face(meta.doneBy)}
-								<span class="truncate">{meta.buyer}</span>
-							{/if}
-						</span>
-					{/if}
-				</button>
-				<Button
-					variant="ghost"
-					size="icon"
-					class="text-muted-foreground size-11 shrink-0"
-					aria-label="{item.name} bearbeiten"
-					href="/items/{item.id}"
-				>
-					<PencilIcon class="size-4" />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon"
-					class="text-muted-foreground hover:text-destructive size-11 shrink-0"
-					aria-label="{item.name} löschen"
-					onclick={() => deleteItem(item)}
-				>
-					<Trash2Icon class="size-4" />
-				</Button>
+							<PencilIcon class="size-4" />
+						</Button>
+					</div>
+				</div>
 			</div>
 		{/snippet}
 
