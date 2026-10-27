@@ -1,5 +1,5 @@
 <script>
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import AlertCircleIcon from '@lucide/svelte/icons/alert-circle';
 	import CheckIcon from '@lucide/svelte/icons/check';
@@ -44,6 +44,7 @@
 	import EntryCheer, { makeCheer } from './EntryCheer.svelte';
 	import {
 		draftFrom,
+		freshDraft,
 		savedEntry,
 		parseRows,
 		draftKey,
@@ -84,6 +85,8 @@
 	let watchBusy = $state(false);
 	/** Jubel nach dem Speichern (EntryCheer), null = keiner. */
 	let cheer = $state(null);
+	/** Zaehlt hoch, wenn das Formular geleert wird: die Zeilen werden neu aufgebaut. */
+	let formGen = $state(0);
 
 	// Kommt man ueber einen anderen Link auf dieselbe Seite (Kalender, Tab),
 	// gilt dessen Datum. `lastQuery` ist bewusst kein $state.
@@ -174,7 +177,8 @@
 	});
 
 	// Pro Uebung: die Saetze, wie sie gespeichert wuerden, und ob sie sich vom
-	// gespeicherten Stand unterscheiden.
+	// gespeicherten Stand unterscheiden. Ein geleerter Entwurf (`fresh`) ist nur
+	// dirty, wenn etwas drinsteht -- leer heisst dort nicht "Eintrag loeschen".
 	const status = $derived(
 		Object.fromEntries(
 			training.exercises.map((ex) => {
@@ -182,10 +186,13 @@
 				if (!d) return [ex.id, null];
 				const { sets, bad } = parseRows(kindOf(ex), d.rows);
 				const note = d.note.trim();
+				if (d.fresh) {
+					return [ex.id, { sets, note, bad, dirty: bad || sets.length > 0 || note !== '', fresh: true }];
+				}
 				const was = savedMap[ex.id] ?? { sets: [], note: '' };
 				const dirty =
 					bad || JSON.stringify({ sets, note }) !== JSON.stringify({ sets: was.sets, note: was.note });
-				return [ex.id, { sets, note, bad, dirty }];
+				return [ex.id, { sets, note, bad, dirty, fresh: false }];
 			})
 		)
 	);
@@ -224,16 +231,30 @@
 		const entries = {};
 		for (const ex of training.exercises) {
 			const s = status[ex.id];
-			if (s?.dirty) entries[ex.id] = { sets: s.sets, note: s.note };
+			if (s?.dirty) entries[ex.id] = { sets: s.sets, note: s.note, append: s.fresh };
 		}
 		const key = draftKey(userId, date);
+		const savedDate = date;
 		busy = true;
 		error = null;
 		saved = false;
 		try {
-			await saveDay(date, entries);
+			await saveDay(savedDate, entries);
 			writeDrafts(key, null);
+			// Erst den Effekt oben nachziehen lassen (er baut die Entwuerfe aus dem
+			// neuen Stand), dann leeren -- sonst ueberschriebe er das leere Formular.
+			await tick();
+			clearForm();
 			saved = true;
+			// Laeuft die Stoppuhr fuer diesen Tag, ist das Training damit zu Ende.
+			if (timer.watch?.date === savedDate) {
+				try {
+					await saveWatch();
+				} catch (err) {
+					error = trainingError(err, 'Gespeichert, aber die Dauer nicht – bitte „Beenden“ tippen.');
+					return;
+				}
+			}
 			cheer = makeCheer();
 		} catch (err) {
 			error = trainingError(err, 'Speichern fehlgeschlagen');
@@ -242,6 +263,18 @@
 		} finally {
 			busy = false;
 		}
+	}
+
+	/**
+	 * Nach dem Speichern: alle Zeilen leer, als neue Saetze fuer den Tag (siehe
+	 * `fresh` in EntryDraft.js). `previous` stimmt nach tick() mit dem gespeicherten
+	 * Stand ueberein, also laesst der Effekt oben die leeren Entwuerfe stehen.
+	 */
+	function clearForm() {
+		const next = {};
+		for (const ex of training.exercises) next[ex.id] = freshDraft(ex, kindOf(ex));
+		drafts = next;
+		formGen += 1;
 	}
 
 	// --- Dauer ----------------------------------------------------------------
@@ -261,22 +294,33 @@
 		clearWatch();
 	}
 
-	/** Stoppuhr beenden; ein zweites Training am selben Tag zaehlt dazu. */
-	async function endTraining() {
+	/**
+	 * Stoppuhr beenden und die Dauer speichern; ein zweites Training am selben
+	 * Tag zaehlt dazu. Wirft bei einem Fehler, die Stoppuhr laeuft dann weiter.
+	 */
+	async function saveWatch() {
 		const w = timer.watch;
 		if (!w || watchBusy) return;
 		const seconds = (Date.now() - w.start) / 1000;
 		const base = sessionFor(w.date)?.duration ?? 0;
 		const workoutId = w.date === date ? (workout?.id ?? w.workout) : w.workout;
 		watchBusy = true;
-		error = null;
 		try {
 			await saveSession(w.date, workoutId, base + seconds);
 			clearWatch();
-		} catch (err) {
-			error = trainingError(err, 'Dauer konnte nicht gespeichert werden.');
 		} finally {
 			watchBusy = false;
+		}
+	}
+
+	/** "Beenden" von Hand. */
+	async function endTraining() {
+		if (!timer.watch || watchBusy) return;
+		error = null;
+		try {
+			await saveWatch();
+		} catch (err) {
+			error = trainingError(err, 'Dauer konnte nicht gespeichert werden.');
 		}
 	}
 
@@ -443,8 +487,9 @@
 					<ul class="divide-y rounded-lg border">
 						{#each exercises as ex (ex.id)}
 							{#if drafts[ex.id]}
-								<!-- Neu pro Tag: der Zustand der Zeile (z.B. Notiz auf/zu) gehoert zum Tag. -->
-								{#key date}
+								<!-- Neu pro Tag und nach jedem Leeren: der Zustand der Zeile (z.B. Notiz
+								     auf/zu) gehoert zum Tag bzw. zum Entwurf. -->
+								{#key `${date}:${formGen}`}
 									<EntryExercise
 										exercise={ex}
 										{date}

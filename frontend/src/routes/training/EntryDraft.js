@@ -1,8 +1,12 @@
 import { parseWeight, setsOf, SETS_MAX, NOTE_MAX } from '$lib/training.svelte.js';
 
-// Entwuerfe der Eintragsseite: pro Uebung `{ rows, note }`, jede Zeile mit den
-// Feldern als Text (so wie getippt) plus `warmup` und `done` (nur Anzeige).
+// Entwuerfe der Eintragsseite: pro Uebung `{ rows, note, fresh }`, jede Zeile mit
+// den Feldern als Text (so wie getippt) plus `warmup` und `done` (nur Anzeige).
 // Erst parseRows() macht daraus Saetze fuer saveDay().
+//
+// `fresh`: der Entwurf ist nach dem Speichern geleert worden. Er steht dann fuer
+// *neue* Saetze des Tages -- leer heisst "nichts zu tun" (nicht "alles loeschen"),
+// und was man eintraegt, haengt saveDay() an den gespeicherten Eintrag an.
 
 export const REPS_LIMIT = 1000;
 export const SECONDS_LIMIT = 36000;
@@ -82,7 +86,12 @@ export function draftFrom(exercise, log, kind) {
 		sets.length > 0
 			? sets.slice(0, SETS_MAX).map((s) => rowFromSet(s, kind))
 			: Array.from({ length: count }, () => emptyRow());
-	return { rows, note: log?.note ?? '' };
+	return { rows, note: log?.note ?? '', fresh: false };
+}
+
+/** Leerer Entwurf nach dem Speichern: neue Saetze kommen zum Tag dazu. */
+export function freshDraft(exercise, kind) {
+	return { ...draftFrom(exercise, null, kind), fresh: true };
 }
 
 // --- localStorage -----------------------------------------------------------
@@ -130,7 +139,8 @@ export function readDrafts(key) {
 					warmup: !!r?.warmup,
 					done: !!r?.done
 				})),
-				note: str(d.note).slice(0, NOTE_MAX)
+				note: str(d.note).slice(0, NOTE_MAX),
+				fresh: !!d.fresh
 			};
 		}
 		return out;

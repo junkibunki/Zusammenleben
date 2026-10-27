@@ -11,6 +11,7 @@
 		kindOf,
 		targetLabel,
 		previousLog,
+		logFor,
 		setsOf,
 		formatSets,
 		formatDate,
@@ -40,6 +41,8 @@
 	const stepText = $derived(toText(step));
 	const sug = $derived(suggestion(exercise, date));
 	const best = $derived(kind === 'weight' ? bestWeightBefore(exercise.id, date) : 0);
+	/** Nach dem Speichern geleert: was fuer den Tag schon drinsteht. */
+	const todayText = $derived(draft.fresh ? formatSets(exercise, logFor(exercise.id, date)) : '');
 
 	// Platzhalter je Zeile: der Satz vom letzten Mal an derselben Stelle,
 	// Aufwaermsaetze und Arbeitssaetze getrennt gezaehlt. Hat man heute mehr
@@ -197,6 +200,14 @@
 			</Button>
 		{/if}
 	</div>
+
+	{#if todayText}
+		<p class="text-muted-foreground text-sm">
+			Heute gespeichert:
+			<span class="text-foreground font-semibold tabular-nums">{todayText}</span>
+			<span class="text-xs">· neue Sätze kommen dazu</span>
+		</p>
+	{/if}
 
 	{#if sug && !sugApplied}
 		<div class="bg-muted flex items-center justify-between gap-2 rounded-md py-1 pr-1 pl-3 text-sm">

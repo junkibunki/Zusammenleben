@@ -442,17 +442,26 @@ export function suggestion(exercise, date) {
 
 /**
  * Die Eintraege eines Trainingstags speichern. `entries` bildet Uebungs-ID auf
- * `{ sets, note }` ab; null (oder keine Saetze und keine Notiz) heisst "nicht
- * gemacht" und loescht einen vorhandenen Eintrag. Unveraenderte Eintraege
- * gehen gar nicht erst raus. `weight` leitet der Server aus `sets` ab.
+ * `{ sets, note, append }` ab; null (oder keine Saetze und keine Notiz) heisst
+ * "nicht gemacht" und loescht einen vorhandenen Eintrag. Mit `append` kommen die
+ * Saetze an einen vorhandenen Eintrag dazu statt ihn zu ersetzen. Unveraenderte
+ * Eintraege gehen gar nicht erst raus. `weight` leitet der Server aus `sets` ab.
  */
 export async function saveDay(date, entries) {
 	const user = me().id;
 
 	const jobs = Object.entries(entries).map(async ([exercise, entry]) => {
 		const existing = logFor(exercise, date);
-		const sets = entry?.sets ?? [];
-		const note = (entry?.note ?? '').trim();
+		let sets = entry?.sets ?? [];
+		let note = (entry?.note ?? '').trim();
+		if (entry?.append && existing) {
+			// Geleertes Formular nach dem Speichern: die neuen Saetze kommen hinten
+			// an den Eintrag des Tages, die Notiz darunter. Nicht abschneiden: ueber
+			// der Grenze (SETS_MAX, NOTE_MAX) lehnt der Server ab, und der Entwurf
+			// bleibt stehen -- besser als stillschweigend verlorene Saetze.
+			sets = [...setsOf(existing), ...sets];
+			note = [(existing.note ?? '').trim(), note].filter(Boolean).join('\n');
+		}
 		if (sets.length === 0 && note === '') {
 			if (!existing) return;
 			await pb.collection('training_logs').delete(existing.id);
