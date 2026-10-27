@@ -60,7 +60,7 @@
 
 <Card.Root class="gap-3 py-4">
 	<Card.Header class="px-4">
-		<Card.Title class="text-base">Personen folgen</Card.Title>
+		<Card.Title class="text-base">Personen, denen du folgst</Card.Title>
 		<Card.Description>
 			Du bekommst eine Mitteilung, wenn jemand, dem du folgst, ein Training veröffentlicht.
 		</Card.Description>

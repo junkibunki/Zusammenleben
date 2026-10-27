@@ -10,13 +10,23 @@
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import UserCheckIcon from '@lucide/svelte/icons/user-check';
+	import UsersIcon from '@lucide/svelte/icons/users';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
-	import { formatDate, formatDuration, today } from '$lib/training.svelte.js';
+	import { formatDuration } from '$lib/training.svelte.js';
 	import { kindLabel, formatDistance, formatPace } from '$lib/cardio.svelte.js';
-	import { feed, syncFeed, loadMore, hasKudos, toggleKudos } from '$lib/training-feed.svelte.js';
-	import { syncFollows, isFollowing, follow, unfollow } from '$lib/training-follows.svelte.js';
+	import {
+		feed,
+		syncFeed,
+		loadMore,
+		hasKudos,
+		toggleKudos,
+		personLabel as label,
+		feedDay as when,
+		kudosNames as names
+	} from '$lib/training-feed.svelte.js';
+	import { follows, syncFollows, isFollowing, follow, unfollow } from '$lib/training-follows.svelte.js';
 	import TrainingTabs from '../TrainingTabs.svelte';
-	import FollowPeople from './FollowPeople.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
@@ -24,8 +34,8 @@
 
 	// Wer hat trainiert -- alle Nutzer der App, die ihre Trainings oeffentlich
 	// machen (Profil), plus die eigenen. Lob heisst hier "Schulterklopfer".
-	// Personen folgen (Push bei neuem Training): FollowPeople.svelte, dazu der
-	// Knopf am Beitrag.
+	// Personen folgen (Push bei neuem Training): eigene Seite personen/ hinter
+	// dem Icon oben, dazu der Knopf am Beitrag.
 
 	const userId = $derived(auth.user?.id ?? '');
 	const isPublic = $derived(Boolean(auth.user?.training_public));
@@ -36,53 +46,45 @@
 	$effect(() => {
 		if (userId) return syncFollows();
 	});
-
-	function label(user) {
-		return user?.name || user?.email?.split('@')[0] || 'Jemand';
-	}
-
-	/** "heute", "gestern" oder "Fr, 02.10." */
-	function when(date) {
-		const t = today();
-		if (date === t) return 'heute';
-		const [y, m, d] = t.split('-').map(Number);
-		const y2 = new Date(y, m - 1, d - 1);
-		const pad = (n) => String(n).padStart(2, '0');
-		if (date === `${y2.getFullYear()}-${pad(y2.getMonth() + 1)}-${pad(y2.getDate())}`) return 'gestern';
-		return formatDate(date);
-	}
-
-	/** "Anna", "Anna und Ben", "Anna, Ben und 3 weitere" */
-	function names(users) {
-		const list = (users ?? []).map(label);
-		if (list.length <= 1) return list.join('');
-		if (list.length === 2) return `${list[0]} und ${list[1]}`;
-		if (list.length === 3) return `${list[0]}, ${list[1]} und ${list[2]}`;
-		return `${list[0]}, ${list[1]} und ${list.length - 2} weitere`;
-	}
 </script>
 
 <main class="flex flex-1 flex-col gap-4 px-3 py-4">
 	<TrainingTabs />
 
-	<div class="text-muted-foreground flex items-start gap-2 px-1 text-sm">
+	<div class="text-muted-foreground flex items-center gap-2 pl-1 text-sm">
 		{#if isPublic}
-			<GlobeIcon class="mt-0.5 size-4 shrink-0" />
-			<p>
+			<GlobeIcon class="size-4 shrink-0" />
+			<p class="min-w-0 flex-1">
 				Deine Trainings sind öffentlich – alle in der App sehen sie hier.
 				<a href="/profile" class="text-foreground underline underline-offset-2">Ändern</a>
 			</p>
 		{:else}
-			<LockIcon class="mt-0.5 size-4 shrink-0" />
-			<p>
+			<LockIcon class="size-4 shrink-0" />
+			<p class="min-w-0 flex-1">
 				Deine Trainings sind privat.
 				<a href="/profile" class="text-foreground underline underline-offset-2">Im Profil</a>
 				kannst du sie im Feed zeigen.
 			</p>
 		{/if}
+		<Button
+			href="/training/feed/personen"
+			variant="ghost"
+			size="icon"
+			class="relative size-11 shrink-0"
+			aria-label={follows.list.length
+				? `Personen, denen du folgst (${follows.list.length})`
+				: 'Personen folgen'}
+		>
+			<UsersIcon />
+			{#if follows.list.length > 0}
+				<span
+					class="bg-primary text-primary-foreground absolute top-1 right-1 min-w-4 rounded-full px-1 text-[10px] leading-4 font-medium tabular-nums"
+				>
+					{follows.list.length}
+				</span>
+			{/if}
+		</Button>
 	</div>
-
-	<FollowPeople />
 
 	{#if feed.error}
 		<Alert.Root variant="destructive">
@@ -138,56 +140,69 @@
 							{/if}
 						</Card.Header>
 
-						<Card.Content class="flex flex-col gap-2 px-4">
-							{#if post.workout}
-								<p class="text-lg leading-tight font-semibold">{post.workout}</p>
-							{/if}
-							<p class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-								{#if post.duration > 0}
-									<span class="inline-flex items-center gap-1">
-										<TimerIcon class="size-4" />
-										<span class="tabular-nums">{formatDuration(post.duration)}</span>
-									</span>
-								{/if}
-								{#if post.exercises > 0}
-									<span>{post.exercises} {post.exercises === 1 ? 'Übung' : 'Übungen'}</span>
-									<span>{post.sets} {post.sets === 1 ? 'Satz' : 'Sätze'}</span>
-								{/if}
-								{#if post.volume > 0}
-									<span class="inline-flex items-center gap-1">
-										<DumbbellIcon class="size-4" />
-										<span class="tabular-nums">{post.volume.toLocaleString('de-DE')} kg</span>
-										Volumen
-									</span>
-								{/if}
-							</p>
-							{#if Array.isArray(post.cardio)}
-								{#each post.cardio as c, i (i)}
-									<p class="flex items-center gap-1.5 text-sm">
-										{#if c.kind === 'bike'}
-											<BikeIcon class="text-primary size-4 shrink-0" />
-										{:else}
-											<FootprintsIcon class="text-primary size-4 shrink-0" />
+						<Card.Content class="px-4">
+							<svelte:element
+								this={post.details?.length ? 'a' : 'div'}
+								href={post.details?.length ? `/training/feed/${post.id}` : undefined}
+								class="-mx-2 flex items-center gap-2 rounded-md px-2 py-1 {post.details?.length
+									? 'hover:bg-muted/50 active:bg-muted transition-colors'
+									: ''}"
+							>
+								<div class="flex min-w-0 flex-1 flex-col gap-2">
+									{#if post.workout}
+										<p class="text-lg leading-tight font-semibold">{post.workout}</p>
+									{/if}
+									<p class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+										{#if post.duration > 0}
+											<span class="inline-flex items-center gap-1">
+												<TimerIcon class="size-4" />
+												<span class="tabular-nums">{formatDuration(post.duration)}</span>
+											</span>
 										{/if}
-										<span class="font-medium">{kindLabel(c.kind)}</span>
-										<span class="text-muted-foreground tabular-nums">
-											{formatDistance(c.distance)} · {formatDuration(c.duration ?? 0)} · {formatPace(
-												c.kind,
-												c.distance,
-												c.duration
-											)}
-										</span>
+										{#if post.exercises > 0}
+											<span>{post.exercises} {post.exercises === 1 ? 'Übung' : 'Übungen'}</span>
+											<span>{post.sets} {post.sets === 1 ? 'Satz' : 'Sätze'}</span>
+										{/if}
+										{#if post.volume > 0}
+											<span class="inline-flex items-center gap-1">
+												<DumbbellIcon class="size-4" />
+												<span class="tabular-nums">{post.volume.toLocaleString('de-DE')} kg</span>
+												Volumen
+											</span>
+										{/if}
 									</p>
-								{/each}
-							{/if}
-							{#if post.records?.length}
-								<p class="flex items-start gap-1.5 text-sm">
-									<TrophyIcon class="text-primary mt-0.5 size-4 shrink-0" />
-									<span>
-										Neuer Bestwert: <span class="font-medium">{post.records.join(', ')}</span>
-									</span>
-								</p>
-							{/if}
+									{#if Array.isArray(post.cardio)}
+										{#each post.cardio as c, i (i)}
+											<p class="flex items-center gap-1.5 text-sm">
+												{#if c.kind === 'bike'}
+													<BikeIcon class="text-primary size-4 shrink-0" />
+												{:else}
+													<FootprintsIcon class="text-primary size-4 shrink-0" />
+												{/if}
+												<span class="font-medium">{kindLabel(c.kind)}</span>
+												<span class="text-muted-foreground tabular-nums">
+													{formatDistance(c.distance)} · {formatDuration(c.duration ?? 0)} · {formatPace(
+														c.kind,
+														c.distance,
+														c.duration
+													)}
+												</span>
+											</p>
+										{/each}
+									{/if}
+									{#if post.records?.length}
+										<p class="flex items-start gap-1.5 text-sm">
+											<TrophyIcon class="text-primary mt-0.5 size-4 shrink-0" />
+											<span>
+												Neuer Bestwert: <span class="font-medium">{post.records.join(', ')}</span>
+											</span>
+										</p>
+									{/if}
+								</div>
+								{#if post.details?.length}
+									<ChevronRightIcon class="text-muted-foreground size-5 shrink-0" />
+								{/if}
+							</svelte:element>
 						</Card.Content>
 
 						<Card.Footer class="flex items-center gap-3 px-4">

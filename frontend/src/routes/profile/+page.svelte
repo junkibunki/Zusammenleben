@@ -359,8 +359,8 @@
 					<Label for="training-public" class="flex-1 py-3">Trainings im Feed zeigen</Label>
 				</div>
 				<p class="text-muted-foreground -mt-2 text-sm">
-					Alle in der App sehen dann, wann du trainiert hast: Training, Dauer, Zahl der Übungen und
-					Sätze und neue Bestwerte – keine Gewichte. Gilt ab dem nächsten Eintrag; ausgeschaltet
+					Alle in der App sehen dann, wann du trainiert hast: Training, Dauer, Übungen mit allen
+					Sätzen und Gewichten und neue Bestwerte – keine Notizen. Gilt ab dem nächsten Eintrag; ausgeschaltet
 					verschwinden auch deine bisherigen Beiträge aus dem Feed.
 				</p>
 			{/if}

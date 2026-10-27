@@ -251,9 +251,26 @@ function parseSets(log) {
 }
 
 /**
+ * Eine Uebung fuer `training_posts.details` (Migration 1790600400):
+ * `{ name, kind, sets: [{ weight, reps, seconds, warmup }] }`. Ohne Notiz --
+ * die bleibt privat. Gleiche Form wie postDetail() in der Migration.
+ */
+function postDetail(exercise, list) {
+	const sets = [];
+	for (let i = 0; i < list.length; i++) {
+		const s = list[i];
+		if (!s) continue;
+		const or = (v) => (typeof v === 'number' ? v : null);
+		sets.push({ weight: or(s.weight), reps: or(s.reps), seconds: or(s.seconds), warmup: s.warmup === true });
+	}
+	return { name: exercise.getString('name'), kind: exercise.getString('kind') || 'weight', sets };
+}
+
+/**
  * Den Feed-Beitrag von `userId` fuer `date` neu berechnen. Laeuft nach jeder
- * Aenderung an Eintraegen oder Dauer des Tages. Nur Kennzahlen, keine
- * einzelnen Gewichte -- das Volumen ist eine Summe (Migration 1790168400).
+ * Aenderung an Eintraegen oder Dauer des Tages. Dazu die Saetze je Uebung mit
+ * Gewicht (Migration 1790600400) -- wer den Feed einschaltet, zeigt sein
+ * Training komplett; nur Notizen und GPS-Punkte bleiben privat.
  *
  * Ist der Feed fuer die Person aus, entstehen keine neuen Beitraege (alte
  * blendet die Rule aus); ein vorhandener wird aber weiter nachgezogen, damit
@@ -295,6 +312,9 @@ function rebuildPost(app, userId, date) {
 
 	const counts = {};
 	const records = [];
+	// Saetze je Uebung fuer die Detailseite des Beitrags (Migration 1790600400).
+	// Wie dort: nur Uebungen mit Arbeitssatz, ohne Notiz.
+	const details = [];
 	let exercises = 0;
 	let sets = 0;
 	let volume = 0;
@@ -321,6 +341,12 @@ function rebuildPost(app, userId, date) {
 		}
 		const w = exercise.getString('workout');
 		counts[w] = (counts[w] || 0) + 1;
+		details.push({
+			workout: w,
+			sort: exercise.getInt('sort'),
+			created: exercise.getString('created'),
+			entry: postDetail(exercise, list)
+		});
 
 		// Neuer Bestwert: schwerer als alles davor -- der erste Eintrag zaehlt nicht.
 		const weight = log.getFloat('weight');
@@ -345,8 +371,13 @@ function rebuildPost(app, userId, date) {
 	if (session && session.getString('workout') && !(session.getString('workout') in counts)) {
 		counts[session.getString('workout')] = 0;
 	}
-	const names = Object.keys(counts)
-		.sort((a, b) => counts[b] - counts[a])
+	const order = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+	// Uebungen in der Reihenfolge der Trainings oben, darin wie im Plan.
+	details.sort(
+		(a, b) =>
+			order.indexOf(a.workout) - order.indexOf(b.workout) || a.sort - b.sort || a.created.localeCompare(b.created)
+	);
+	const names = order
 		.map((id) => {
 			try {
 				return app.findRecordById('training_workouts', id).getString('name');
@@ -366,6 +397,7 @@ function rebuildPost(app, userId, date) {
 	post.set('volume', Math.round(volume));
 	post.set('records', records);
 	post.set('cardio', cardio);
+	post.set('details', details.map((d) => d.entry));
 	app.save(post);
 	return existing ? null : post;
 }
