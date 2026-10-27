@@ -5,7 +5,15 @@
 	import AlertCircleIcon from '@lucide/svelte/icons/circle-alert';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import BellOffIcon from '@lucide/svelte/icons/bell-off';
-	import { auth, avatarUrl, updateProfile, setShowTraining, setTrainingPublic } from '$lib/pocketbase.svelte.js';
+	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
+	import {
+		auth,
+		avatarUrl,
+		updateProfile,
+		setShowTraining,
+		setTrainingPublic,
+		requestPasswordReset
+	} from '$lib/pocketbase.svelte.js';
 	import { setQuickNav } from '$lib/pocketbase.svelte.js';
 	import { navLinks, quickPaths, QUICK_MAX } from '$lib/nav-links.svelte.js';
 	import { push, refreshPush, enablePush, disablePush, sendTestPush } from '$lib/push.svelte.js';
@@ -16,6 +24,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 
 	// PocketBase-Default fuer Dateifelder; der Server antwortet sonst mit 400.
 	const MAX_BYTES = 5 * 1024 * 1024;
@@ -214,6 +223,31 @@
 		}
 	}
 
+	// --- Passwort ---
+
+	let resetOpen = $state(false);
+	let resetBusy = $state(false);
+	let resetError = $state('');
+	let resetSent = $state(false);
+
+	async function confirmReset() {
+		// Selbst schliessen: `AlertDialog.Action` schliesst mit eigenem onclick
+		// nicht von allein (docs/pitfalls/designsystem.md).
+		resetOpen = false;
+		if (resetBusy) return;
+		resetBusy = true;
+		resetError = '';
+		resetSent = false;
+		try {
+			await requestPasswordReset();
+			resetSent = true;
+		} catch (err) {
+			resetError = err?.message ?? 'Mail konnte nicht verschickt werden';
+		} finally {
+			resetBusy = false;
+		}
+	}
+
 	// --- Benachrichtigungen ---
 
 	// Auf dem iPhone gibt es Web Push nur in der installierten PWA. Im
@@ -323,6 +357,42 @@
 				</Button>
 			</Card.Footer>
 		</form>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>Passwort</Card.Title>
+			<Card.Description>
+				Du bekommst eine Mail an {auth.user?.email ?? ''} mit einem Link, über den du ein neues
+				Passwort setzt.
+			</Card.Description>
+		</Card.Header>
+
+		<Card.Content class="flex flex-col gap-4">
+			<Button
+				variant="outline"
+				size="lg"
+				class="h-11 self-start"
+				disabled={resetBusy}
+				onclick={() => (resetOpen = true)}
+			>
+				<KeyRoundIcon class="size-4" />
+				{resetBusy ? 'Wird verschickt …' : 'Passwort zurücksetzen'}
+			</Button>
+
+			{#if resetError}
+				<Alert.Root variant="destructive">
+					<AlertCircleIcon />
+					<Alert.Description>{resetError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+			{#if resetSent}
+				<Alert.Root>
+					<CheckIcon />
+					<Alert.Description>Mail ist unterwegs. Schau auch im Spam-Ordner nach.</Alert.Description>
+				</Alert.Root>
+			{/if}
+		</Card.Content>
 	</Card.Root>
 
 	<Card.Root>
@@ -487,3 +557,19 @@
 		</Card.Content>
 	</Card.Root>
 </main>
+
+<AlertDialog.Root bind:open={resetOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Passwort zurücksetzen?</AlertDialog.Title>
+			<AlertDialog.Description>
+				Wir schicken eine Mail an {auth.user?.email ?? ''}. Dein bisheriges Passwort gilt weiter,
+				bis du über den Link ein neues setzt.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel class="h-11">Abbrechen</AlertDialog.Cancel>
+			<AlertDialog.Action class="h-11" onclick={confirmReset}>Mail senden</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

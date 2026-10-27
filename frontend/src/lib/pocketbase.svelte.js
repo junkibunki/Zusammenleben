@@ -99,3 +99,13 @@ export async function setQuickNav(paths) {
 	const record = await pb.collection('users').update(me.id, { quick_nav: paths });
 	pb.authStore.save(pb.authStore.token, record);
 }
+
+/**
+ * Laesst PocketBase die Mail "Passwort zuruecksetzen" an die eigene Adresse
+ * schicken. Der Link darin fuehrt auf die Bestaetigungsseite von PocketBase.
+ */
+export async function requestPasswordReset() {
+	const email = pb.authStore.record?.email;
+	if (!email) throw new Error('Keine E-Mail-Adresse hinterlegt');
+	await pb.collection('users').requestPasswordReset(email);
+}
