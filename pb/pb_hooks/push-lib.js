@@ -233,6 +233,30 @@ function categoryLabel(app, id) {
 	}
 }
 
+/**
+ * Ein Haupt-Mitglied hat jemanden als Gast eingetragen (households-lib.js) --
+ * nur die eingeladene Person erfaehrt es, auf allen ihren Geraeten.
+ */
+function notifyGuestInvited(app, membership, actorId) {
+	const subscriptions = app.findRecordsByFilter(
+		'push_subscriptions',
+		'user = {:uid}',
+		'-created',
+		50,
+		0,
+		{ uid: membership.getString('user') }
+	);
+	const where = householdLabel(app, membership.getString('household'));
+	const from = userLabel(app, actorId);
+
+	return broadcast(app, subscriptions, {
+		title: where ? `Du bist zu Gast: ${where}` : 'Du bist zu Gast',
+		body: from ? `${from} hat dich eingeladen.` : 'Du wurdest eingeladen.',
+		tag: `einkauf-guest-${membership.id}`,
+		url: '/'
+	});
+}
+
 /** Probebenachrichtigung an alle Geraete *einer* Person. */
 function sendTest(app, userId) {
 	const subscriptions = app.findRecordsByFilter(
@@ -458,5 +482,6 @@ module.exports = {
 	notifyNewExpense,
 	notifyTogetherPlanned,
 	notifyTogetherComment,
+	notifyGuestInvited,
 	userLabel
 };

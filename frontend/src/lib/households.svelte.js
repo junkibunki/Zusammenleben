@@ -1,9 +1,10 @@
 import { pb } from './pocketbase.svelte.js';
 
 // Haushalte des angemeldeten Nutzers (Migration 1789304400). Welche es gibt und
-// wer wo Mitglied ist, pflegt der Superuser im Admin-UI; hier wird nur gelesen
-// und der *aktive* Haushalt gewaehlt, auf den sich Liste, Ausgaben, Wuensche
-// und der Standort des Autos beziehen.
+// wer wo Mitglied ist, pflegt der Superuser im Admin-UI -- einen Gast
+// koennen Haupt-Mitglieder aber auch selbst eintragen (`inviteGuest`). Sonst wird hier gelesen und der
+// *aktive* Haushalt gewaehlt, auf den sich Liste, Ausgaben, Wuensche und der
+// Standort des Autos beziehen.
 
 export const households = $state({
 	// { id, name, carName, role: 'haupt' | 'gast', until } -- nur laufende
@@ -157,6 +158,35 @@ export function syncHouseholds(userId) {
 		households.activeId = '';
 		households.loading = true;
 	};
+}
+
+/**
+ * Accounts, die sich als Gast einladen lassen: Name enthaelt `query` oder
+ * E-Mail ist genau `query`; wer schon laufend dabei ist, fehlt. Darf nur ein
+ * Haupt-Mitglied (pb_hooks/households-lib.js). Liefert nur id, Name, Foto.
+ */
+export async function searchGuestCandidates(householdId, query) {
+	const q = query.trim();
+	if (!householdId || !q) return [];
+	return pb.send(`/api/households/${encodeURIComponent(householdId)}/guests/search`, {
+		query: { q },
+		requestKey: 'guest-search'
+	});
+}
+
+/**
+ * Traegt `userId` als Gast ein. `untilDate` ist der Wert eines
+ * `<input type="date">` oder leer; gemeint ist: bis einschliesslich dieses
+ * Tages, also bis 23:59:59 Ortszeit. Liefert `{ user, membership }` im Format
+ * von `listMembers()`.
+ */
+export async function inviteGuest(householdId, userId, untilDate) {
+	const until = untilDate ? new Date(`${untilDate}T23:59:59`).toISOString() : '';
+	const { user, membership } = await pb.send(
+		`/api/households/${encodeURIComponent(householdId)}/guests`,
+		{ method: 'POST', body: { user: userId, until }, requestKey: null }
+	);
+	return { ...user, membership };
 }
 
 /**

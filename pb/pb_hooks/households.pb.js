@@ -75,3 +75,37 @@ const checkMembership = (e) => {
 };
 onRecordCreateRequest(checkMembership, 'memberships');
 onRecordUpdateRequest(checkMembership, 'memberships');
+
+// Gaeste einladen, nur fuer Haupt-Mitglieder -- warum als eigene Routen,
+// steht in households-lib.js.
+routerAdd(
+	'GET',
+	'/api/households/{id}/guests/search',
+	(e) => {
+		const q = e.request.url.query().get('q');
+		return e.json(
+			200,
+			require(`${__hooks}/households-lib.js`).searchGuests(e.app, e.auth.id, e.request.pathValue('id'), q)
+		);
+	},
+	$apis.requireAuth('users')
+);
+
+routerAdd(
+	'POST',
+	'/api/households/{id}/guests',
+	(e) => {
+		const body = e.requestInfo().body || {};
+		return e.json(
+			200,
+			require(`${__hooks}/households-lib.js`).inviteGuest(
+				e.app,
+				e.auth.id,
+				e.request.pathValue('id'),
+				String(body.user || ''),
+				String(body.until || '')
+			)
+		);
+	},
+	$apis.requireAuth('users')
+);
