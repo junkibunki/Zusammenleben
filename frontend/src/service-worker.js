@@ -39,6 +39,10 @@ self.addEventListener('push', (event) => {
 			// Ein Tag pro Eintrag: zwei neue Sachen ergeben zwei Meldungen, eine
 			// Wiederholung desselben Pushes ersetzt die vorhandene.
 			tag: data.tag,
+			// Satzpause (training-lib.js): dieselbe Meldung soll beim naechsten
+			// Mal wieder klingeln, und das Handy soll spuerbar brummen.
+			renotify: Boolean(data.renotify && data.tag),
+			vibrate: Array.isArray(data.vibrate) ? data.vibrate : undefined,
 			data: { url: data.url || '/' }
 		})
 	);

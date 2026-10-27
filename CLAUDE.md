@@ -60,7 +60,7 @@ kurze Datei als ein siebter Absatz in einer fremden.
 * Messwerte nur, wenn sie das Erkennen tragen (`?thumb=200x200` → 5,6 KB vs. 7,9 KB), nicht
   als Beleg dafür, dass gemessen wurde.
 * Wird ein Abschnitt beim Ergänzen länger als ~80 Zeilen, teile ihn auf, statt ihn wachsen
-  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 240 — der nächste
+  zu lassen. Diese Datei soll unter ~200 Zeilen bleiben (Stand jetzt: 242 — der nächste
   Zuwachs geht nicht mehr hier hinein, sondern in eine Datei unter `docs/pitfalls/`).
 
 ## Vertiefung: erst lesen, wenn das Thema dran ist
@@ -147,7 +147,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │   │                              # (Schluessel/Empfaenger/Versand), wishes.pb.js
 │   │                              # (Doppelte-Pruefung + Zaehler-Route), training.pb.js
 │   │                              # + training-lib.js (Saetze pruefen, Cron-
-│   │                              # Erinnerung, Feed-Beitrag, Push an Follower),
+│   │                              # Erinnerung, Feed-Beitrag, Push an Follower,
+│   │                              # Satzpause-Push per sleep-Prozess),
 │   │                              # together.pb.js
 │   │                              # (Schreibrechte + Push), webpush.js
 │   │                              # GENERIERT

@@ -1,4 +1,5 @@
 import { untrack } from 'svelte';
+import { pb } from '$lib/pocketbase.svelte.js';
 
 // Satzpause und Trainingsdauer der Eintragsseite. Beide stehen als Zeitstempel
 // im localStorage, damit sie Neuladen und das Anhalten im Hintergrund
@@ -178,6 +179,58 @@ function letSleep() {
 	lock?.release().catch(() => {});
 }
 
+// --- Push bei gesperrtem Handy ---------------------------------------------
+//
+// Gesperrt steht das JS still, Ton und Vibration fallen aus -- Wake Lock hin
+// oder her. Deshalb kennt der Server das Ende der Pause (PUT /api/training/rest,
+// pb_hooks/training-lib.js) und schickt dann eine Push-Meldung, die das Handy
+// klingeln laesst. Erlebt die Seite das Ende selbst -- sichtbar, in den letzten
+// Sekunden --, nimmt sie die Meldung zurueck (DELETE) und klingelt selbst.
+// Ausnahme: Ton ist an, aber der Browser hat ihn noch nicht freigegeben
+// (Neuladen ohne Tipp); dann klingelt eben die Meldung.
+
+const REST_URL = '/api/training/rest';
+/** Tag der Meldung, wie in training-lib.js. */
+const REST_TAG = 'einkauf-training-rest';
+/** Das Ende, das der Server gerade bewacht (0 = keins). */
+let remoteDue = 0;
+
+/** Das aktuelle Ende beim Server eintragen (ersetzt ein frueheres). */
+function remoteSchedule() {
+	remoteDue = timer.restEnd;
+	// requestKey null: der Request kann bis zum Ende der Pause offen bleiben
+	// (der Server wartet selbst), ein zweiter darf ihn nicht abbrechen.
+	pb.send(REST_URL, { method: 'PUT', body: { due: timer.restEnd }, requestKey: null }).catch(() => {});
+}
+
+/** Die Seite uebernimmt das Ende selbst. */
+function remoteCancel() {
+	if (remoteDue === 0) return;
+	const due = remoteDue;
+	remoteDue = 0;
+	// Nur dieses Ende loeschen: ueberholt der DELETE den PUT einer neuen Pause,
+	// bleibt die neue bewacht.
+	pb.send(REST_URL, { method: 'DELETE', query: { due }, requestKey: null, keepalive: true }).catch(() => {});
+}
+
+/** Kann die Seite das Ende selbst hoerbar machen (oder soll sie stumm sein)? */
+function handlesEndItself() {
+	return document.visibilityState === 'visible' && (!timer.sound || audio?.state === 'running');
+}
+
+/** Eine schon gezeigte "Pause vorbei"-Meldung wegraeumen. */
+function closeRestNotifications() {
+	try {
+		navigator.serviceWorker
+			?.getRegistration()
+			.then((reg) => reg?.getNotifications({ tag: REST_TAG }))
+			.then((list) => list?.forEach((n) => n.close()))
+			.catch(() => {});
+	} catch {
+		// Kein Service Worker (Dev ohne Registrierung).
+	}
+}
+
 function busy() {
 	return timer.restEnd > 0 || timer.restDoneAt > 0 || timer.watch !== null;
 }
@@ -187,12 +240,18 @@ function tick() {
 	timer.now = now;
 	if (timer.restEnd > 0 && now < timer.restEnd) {
 		const left = Math.ceil((timer.restEnd - now) / 1000);
-		if (left <= COUNTDOWN_S && left !== lastTick) {
-			lastTick = left;
-			countdownTick();
+		if (left <= COUNTDOWN_S) {
+			if (left !== lastTick) {
+				lastTick = left;
+				countdownTick();
+			}
+			// Kurz vor Schluss und die Seite ist dran: die Push-Meldung abbestellen.
+			if (remoteDue !== 0 && handlesEndItself()) remoteCancel();
 		}
 	}
 	if (timer.restEnd > 0 && now >= timer.restEnd) {
+		// Ab jetzt hat der Server gesendet oder sendet gleich -- nichts mehr abzubestellen.
+		remoteDue = 0;
 		if (now - timer.restEnd < VIBRATE_WITHIN_MS) {
 			vibrate();
 			doneChime();
@@ -229,6 +288,7 @@ function onVisible() {
 		tick();
 		schedule();
 		keepAwake();
+		closeRestNotifications();
 	}
 }
 
@@ -247,6 +307,9 @@ export function startTimers(userId) {
 		if (rest && rest.end > now) {
 			timer.restEnd = rest.end;
 			timer.restTotal = rest.total > 0 ? rest.total : rest.end - now;
+			// Nach einem Neuladen weiss nur der Server noch vom Ende; neu
+			// eintragen ist billig und ersetzt hoechstens denselben Wert.
+			remoteSchedule();
 		} else {
 			timer.restEnd = 0;
 			write(REST_KEY + user, null);
@@ -288,6 +351,7 @@ export function startRest(seconds) {
 	timer.restEnd = now + timer.restTotal;
 	timer.restDoneAt = 0;
 	write(REST_KEY + user, { end: timer.restEnd, total: timer.restTotal });
+	remoteSchedule();
 	schedule();
 	keepAwake();
 }
@@ -299,6 +363,7 @@ export function addRest(seconds) {
 	timer.restTotal += seconds * 1000;
 	lastTick = 0;
 	write(REST_KEY + user, { end: timer.restEnd, total: timer.restTotal });
+	remoteSchedule();
 }
 
 /** Pause abbrechen bzw. "Pause vorbei" schliessen. */
@@ -306,6 +371,8 @@ export function skipRest() {
 	timer.restEnd = 0;
 	timer.restDoneAt = 0;
 	write(REST_KEY + user, null);
+	remoteCancel();
+	closeRestNotifications();
 	letSleep();
 	if (!busy()) stopInterval();
 }

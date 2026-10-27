@@ -418,4 +418,167 @@ function notifyKudos(app, post, fromId) {
 	});
 }
 
-module.exports = { berlin, sendDueReminders, normalizeLog, rebuildPost, notifyKudos, notifyFollowers };
+// --- Satzpause (Migration 1790341200) ---------------------------------------
+//
+// Am Ende der Satzpause soll das Handy auch gesperrt klingeln. Gesperrt steht
+// das JS der Seite still, also meldet der Server: der Client traegt das Ende
+// der Pause als Zeitstempel ein (`rest_timers`, eine Zeile pro Person) und
+// nimmt es zurueck, sobald er das Ende selbst erlebt (training-timer.svelte.js).
+//
+// Die JS-VM hat keinen setTimeout, und der Cron tickt nur zur vollen Minute.
+// Darum zwei Waechter fuer dasselbe Ende: der Cron holt zu jeder vollen Minute
+// alles, was bis zur naechsten faellig wird, und wartet bis dahin; was erst
+// *nach* dem Tick eingetragen wird und schon vor dem naechsten faellig ist,
+// wartet der Request selbst ab. Gewartet wird mit einem `sleep`-Prozess
+// ($os.exec), das blockiert nur diese eine VM. Gesendet wird nur, wer die
+// Zeile mit *unveraendertem* `due` loeschen konnte -- so gibt es keine
+// doppelte Meldung, wenn beide dieselbe Pause bewachen, und eine verlaengerte,
+// ersetzte oder abgebrochene Pause laesst den alten Waechter leer ausgehen.
+
+/** Laenger wartet kein Waechter (Cron-Fenster ist eine Minute). */
+const REST_SLEEP_MAX_MS = 90000;
+/** Ein aelteres Ende (Server war weg) wird nicht mehr gemeldet, nur geloescht. */
+const REST_STALE_MS = 60000;
+const REST_MESSAGE = {
+	title: 'Pause vorbei!',
+	body: 'Weiter mit dem nächsten Satz.',
+	// Ein Tag fuer alle Pausen, renotify: die naechste ersetzt die alte und
+	// klingelt trotzdem. Den Tag kennt auch der Client, er schliesst die Meldung.
+	tag: 'einkauf-training-rest',
+	renotify: true,
+	vibrate: [300, 120, 300, 120, 500],
+	url: '/training'
+};
+
+/** Beginn der naechsten vollen Minute (ms). */
+function nextMinute(now) {
+	return Math.floor(now / 60000) * 60000 + 60000;
+}
+
+/** Push-Abos einer Person. */
+function userSubscriptions(app, userId) {
+	return app.findRecordsByFilter('push_subscriptions', 'user = {:uid}', '-created', 50, 0, { uid: userId });
+}
+
+/**
+ * Blockiert `ms` Millisekunden ueber einen Kindprozess -- die VM kennt kein
+ * setTimeout. `sleep` auf dem Server (Linux), PowerShell beim Entwickeln
+ * unter Windows. false, wenn beides fehlt.
+ */
+function sleepMs(ms) {
+	if (!(ms > 0)) return true;
+	const capped = Math.min(ms, REST_SLEEP_MAX_MS);
+	try {
+		$os.exec('sleep', (capped / 1000).toFixed(3)).run();
+		return true;
+	} catch {
+		// Kein sleep: Windows.
+	}
+	try {
+		$os.exec('powershell', '-NoProfile', '-Command', 'Start-Sleep -Milliseconds ' + Math.round(capped)).run();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** Loescht die Zeile, aber nur, wenn `due` noch das erwartete ist. */
+function claimRest(app, id, due) {
+	const result = app
+		.db()
+		.newQuery('DELETE FROM rest_timers WHERE id = {:id} AND due = {:due}')
+		.bind({ id, due })
+		.execute();
+	return result.rowsAffected() > 0;
+}
+
+/**
+ * Wartet bis `due`, beansprucht die Zeile und schickt die Meldung an alle
+ * Geraete von `userId`. true, wenn gesendet wurde.
+ */
+function fireRest(app, id, userId, due) {
+	const wait = due - Date.now();
+	if (wait < -REST_STALE_MS) {
+		claimRest(app, id, due);
+		return false;
+	}
+	if (!sleepMs(wait)) {
+		app.logger().warn('Satzpause: kein sleep verfuegbar, Meldung entfaellt', 'user', userId);
+		claimRest(app, id, due);
+		return false;
+	}
+	if (!claimRest(app, id, due)) return false;
+	pushLib.broadcast(app, userSubscriptions(app, userId), REST_MESSAGE);
+	return true;
+}
+
+/**
+ * Traegt das Ende der Pause von `userId` ein (`due` in ms). Ohne Push-Abo
+ * gibt es nichts zu bewachen. Faellig vor dem naechsten Cron-Tick: dieser
+ * Request wartet selbst (und antwortet erst danach).
+ */
+function scheduleRest(app, userId, due) {
+	if (userSubscriptions(app, userId).length === 0) return { watched: false };
+
+	let record;
+	try {
+		record = app.findFirstRecordByData('rest_timers', 'user', userId);
+	} catch {
+		record = new Record(app.findCollectionByNameOrId('rest_timers'));
+		record.set('user', userId);
+	}
+	record.set('due', due);
+	app.save(record);
+
+	// Die Uhr erst *nach* dem Speichern lesen: faellt die volle Minute dazwischen,
+	// hat der Cron die Zeile schon nicht mehr gesehen -- dann wartet dieser Request.
+	if (due < nextMinute(Date.now())) fireRest(app, record.id, userId, due);
+	return { watched: true };
+}
+
+/**
+ * Die Seite erlebt das Ende selbst: nichts mehr melden. Mit `due` nur dieses
+ * eine Ende -- ueberholt der DELETE einen spaeteren PUT, bleibt dessen Pause
+ * bewacht. 0 loescht, was auch immer da steht.
+ */
+function cancelRest(app, userId, due) {
+	app
+		.db()
+		.newQuery('DELETE FROM rest_timers WHERE user = {:user} AND ({:due} = 0 OR due = {:due})')
+		.bind({ user: userId, due: due || 0 })
+		.execute();
+}
+
+/**
+ * Cron, jede Minute: alle Pausen bewachen, die bis zur naechsten vollen
+ * Minute enden -- der Reihe nach, jede bis zu ihrem Ende abgewartet. `now`
+ * nur fuer Tests.
+ */
+function fireDueRests(app, now) {
+	const start = now === undefined ? Date.now() : now;
+	const timers = app.findRecordsByFilter('rest_timers', 'due < {:end}', 'due', 100, 0, {
+		end: nextMinute(start)
+	});
+	let sent = 0;
+	for (let i = 0; i < timers.length; i++) {
+		const t = timers[i];
+		try {
+			if (fireRest(app, t.id, t.getString('user'), t.getInt('due'))) sent++;
+		} catch (err) {
+			app.logger().warn('Satzpause-Push fehlgeschlagen', 'timer', t.id, 'fehler', String(err));
+		}
+	}
+	return sent;
+}
+
+module.exports = {
+	berlin,
+	sendDueReminders,
+	normalizeLog,
+	rebuildPost,
+	notifyKudos,
+	notifyFollowers,
+	scheduleRest,
+	cancelRest,
+	fireDueRests
+};

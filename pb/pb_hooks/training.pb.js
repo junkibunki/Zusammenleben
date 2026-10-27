@@ -103,3 +103,45 @@ cronAdd('training-reminders', '* * * * *', () => {
 		$app.logger().error('Trainingserinnerungen fehlgeschlagen', 'fehler', String(err));
 	}
 });
+
+// Satzpause (Migration 1790341200): das Ende der Pause eintragen, damit der
+// Server am Ende eine Push-Meldung schickt, wenn das Handy gesperrt ist --
+// und zuruecknehmen, sobald die Seite das Ende selbst erlebt. Liegt das Ende
+// noch vor dem naechsten Cron-Tick, wartet der PUT-Request selbst darauf und
+// antwortet erst dann (training-lib.js erklaert, warum).
+routerAdd(
+	'PUT',
+	'/api/training/rest',
+	(e) => {
+		const body = e.requestInfo().body || {};
+		const due = Number(body.due);
+		const now = Date.now();
+		if (!Number.isFinite(due) || due < now - 60000 || due > now + 30 * 60000) {
+			throw new BadRequestError('Ungültiges Ende der Pause.');
+		}
+		return e.json(200, require(`${__hooks}/training-lib.js`).scheduleRest(e.app, e.auth.id, Math.round(due)));
+	},
+	$apis.requireAuth()
+);
+
+routerAdd(
+	'DELETE',
+	'/api/training/rest',
+	(e) => {
+		const due = Number((e.requestInfo().query || {}).due);
+		require(`${__hooks}/training-lib.js`).cancelRest(e.app, e.auth.id, Number.isFinite(due) ? Math.round(due) : 0);
+		return e.json(200, {});
+	},
+	$apis.requireAuth()
+);
+
+// Jede volle Minute: die Pausen bewachen, die bis zur naechsten enden. Der
+// Lauf kann bis zu einer Minute dauern; PocketBase startet jeden Cron-Lauf in
+// einer eigenen Goroutine, die Erinnerungen oben warten nicht darauf.
+cronAdd('training-rest', '* * * * *', () => {
+	try {
+		require(`${__hooks}/training-lib.js`).fireDueRests($app);
+	} catch (err) {
+		$app.logger().error('Satzpausen-Cron fehlgeschlagen', 'fehler', String(err));
+	}
+});

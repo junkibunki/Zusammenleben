@@ -84,6 +84,16 @@ Bundles.
 Anlegenden mit. Gemessen: ein `create` mit drei Empfängern dauert 260–470 ms statt ~40 ms.
 Für eine Einkaufsliste in Ordnung; bei hundert Empfängern braucht es einen anderen Weg.
 
+**Warten geht trotzdem — über einen Kindprozess.** Wer etwas sekundengenau *später*
+schicken muss (die Satzpause, `training-lib.js`), hat weder Timer noch einen Cron unter
+Minutentakt. Was funktioniert: `$os.exec('sleep', '12.500').run()` blockiert genau diese
+eine VM, der Rest des Servers läuft weiter (jeder Cron-Lauf hat eine eigene Goroutine;
+gemessen: der Cron sendet 0,5 s nach der Fälligkeit). Unter Windows gibt es kein `sleep`,
+dort `powershell -NoProfile -Command Start-Sleep` als Ersatz. Zwei Dinge dabei: `run()`
+wirft, wenn das Programm fehlt — also beides in `try` — und wer so wartet, darf nicht
+annehmen, der Einzige zu sein, der die Aufgabe kennt: erst ein bedingtes
+`DELETE … WHERE id = … AND due = …` mit `rowsAffected()`, dann senden.
+
 **`app.logger()` schreibt nicht nach stdout**, sondern in die `_logs`-Collection. Ansehen
 mit `GET /api/logs?perPage=20&sort=-created` als Superuser; die Zeilen erscheinen mit ein
 paar Sekunden Verzögerung.
