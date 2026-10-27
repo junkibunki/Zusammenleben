@@ -16,14 +16,15 @@
 		today,
 		WEEKDAYS
 	} from '$lib/training.svelte.js';
+	import { kindLabel, formatDistance, formatPace } from '$lib/cardio.svelte.js';
 	import TrainingTabs from '../TrainingTabs.svelte';
 	import DayWeight from './DayWeight.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 
-	// Monatsansicht: an welchen Tagen trainiert wurde (und welches Training),
-	// welche Wochentage geplant sind, Trainings pro Woche.
+	// Monatsansicht: an welchen Tagen trainiert wurde (welches Training, welche
+	// Cardio-Strecke), welche Wochentage geplant sind, Trainings pro Woche.
 
 	const userId = $derived(auth.user?.id ?? '');
 
@@ -102,7 +103,7 @@
 
 	// Liest nur userId/from/to, schreibt nur die drei Felder unten (CLAUDE.md:
 	// keine $effect-Schleife). Die alten Daten bleiben stehen, bis die neuen da sind.
-	let days = $state({ logs: [], sessions: [] });
+	let days = $state({ logs: [], sessions: [], routes: [] });
 	let daysLoading = $state(true);
 	let daysError = $state(null);
 
@@ -135,12 +136,12 @@
 	const slotOf = $derived(Object.fromEntries(workouts.map((w, i) => [w.id, i < 8 ? i + 1 : 0])));
 
 	/**
-	 * Pro Datum: Trainings (IDs, haeufigstes zuerst), Zahl der Uebungen, Session.
-	 * `logs`/`sessions` aus loadDays oder dem Store.
+	 * Pro Datum: Trainings (IDs, haeufigstes zuerst), Zahl der Uebungen, Session,
+	 * Cardio-Strecken. `logs`/`sessions`/`routes` aus loadDays oder dem Store.
 	 */
-	function summarize(logs, sessions) {
+	function summarize(logs, sessions, routes) {
 		const map = {};
-		const entry = (date) => (map[date] ??= { counts: {}, exercises: 0, session: null });
+		const entry = (date) => (map[date] ??= { counts: {}, exercises: 0, session: null, cardio: [] });
 		for (const l of logs) {
 			// Ein Eintrag nur mit Notiz ist kein Trainingstag.
 			if (!hasSets(l)) continue;
@@ -154,6 +155,7 @@
 			e.session = s;
 			if (s.workout && !(s.workout in e.counts)) e.counts[s.workout] = 0;
 		}
+		for (const r of routes ?? []) entry(r.date).cardio.push(r);
 		for (const e of Object.values(map)) {
 			const ids = Object.keys(e.counts).filter((id) => workoutById[id]);
 			// Das Training der Session zaehlt vor, sonst das mit den meisten Uebungen.
@@ -166,8 +168,9 @@
 		return map;
 	}
 
-	const byDate = $derived(summarize(days.logs, days.sessions));
-	const trained = (info) => Boolean(info && (info.exercises > 0 || info.session));
+	const byDate = $derived(summarize(days.logs, days.sessions, days.routes));
+	const strength = (info) => Boolean(info && (info.exercises > 0 || info.session));
+	const trained = (info) => strength(info) || (info?.cardio?.length ?? 0) > 0;
 
 	const planDays = $derived(new Set(training.plan?.days ?? []));
 	const planned = $derived(planDays.size);
@@ -180,7 +183,8 @@
 		const inWeek = (d) => d >= start && d <= end;
 		const map = summarize(
 			training.logs.filter((l) => inWeek(l.date)),
-			training.sessions.filter((s) => inWeek(s.date))
+			training.sessions.filter((s) => inWeek(s.date)),
+			training.routes.filter((r) => inWeek(r.date))
 		);
 		return Object.values(map).filter(trained).length;
 	});
@@ -196,6 +200,25 @@
 
 	const info = $derived(byDate[selected]);
 	const selectedWorkouts = $derived((info?.workouts ?? []).map((id) => workoutById[id]));
+	/** "Push, Laufen" -- Trainings und Cardio-Arten des gewaehlten Tages. */
+	const selectedNames = $derived([
+		...selectedWorkouts.map((w) => w.name),
+		...new Set((info?.cardio ?? []).map((r) => kindLabel(r.kind)))
+	]);
+
+	/** Fuer aria-label: "Push", "Laufen", "Push, Laufen" oder "" */
+	function dayNames(day) {
+		const w = day?.workouts?.[0] ? workoutById[day.workouts[0]]?.name : '';
+		const c = [...new Set((day?.cardio ?? []).map((r) => kindLabel(r.kind)))];
+		return [w, ...c].filter(Boolean).join(', ');
+	}
+
+	function timeOf(iso) {
+		const d = new Date(iso);
+		return Number.isNaN(d.getTime())
+			? ''
+			: d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+	}
 
 	function select(date) {
 		selected = date;
@@ -280,7 +303,8 @@
 						{@const outside = date.slice(0, 7) !== month}
 						{@const isToday = date === todayIso}
 						{@const isPlanned = planDays.has(weekdayId(date))}
-						{@const label = `${formatDate(date)}${isToday ? ', heute' : ''}${done ? `, trainiert${w ? `: ${w.name}` : ''}` : isPlanned ? ', geplant' : ''}`}
+						{@const names = dayNames(day)}
+						{@const label = `${formatDate(date)}${isToday ? ', heute' : ''}${done ? `, trainiert${names ? `: ${names}` : ''}` : isPlanned ? ', geplant' : ''}`}
 						<button
 							type="button"
 							onclick={() => select(date)}
@@ -300,8 +324,16 @@
 							</span>
 							{#if done}
 								<span class="flex h-3.5 items-center gap-0.5 text-[10px] leading-none font-semibold">
-									<span class="workout-dot slot-{w ? slotOf[w.id] : 0}" aria-hidden="true"></span>
-									<span aria-hidden="true">{w ? w.name.charAt(0).toUpperCase() : '✓'}</span>
+									{#if strength(day)}
+										<span class="workout-dot slot-{w ? slotOf[w.id] : 0}" aria-hidden="true"></span>
+										<span aria-hidden="true">{w ? w.name.charAt(0).toUpperCase() : '✓'}</span>
+									{/if}
+									{#if day.cardio.length > 0}
+										<span class="cardio-dot" aria-hidden="true"></span>
+										{#if !strength(day)}
+											<span aria-hidden="true">{kindLabel(day.cardio[0].kind).charAt(0)}</span>
+										{/if}
+									{/if}
 								</span>
 							{:else}
 								<span class="h-3.5" aria-hidden="true"></span>
@@ -311,7 +343,7 @@
 				{/each}
 			</div>
 
-			{#if workouts.length > 0}
+			{#if workouts.length > 0 || training.routes.length > 0}
 				<ul class="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Legende">
 					{#each workouts as w (w.id)}
 						<li class="flex items-center gap-1.5">
@@ -319,6 +351,12 @@
 							{w.name}
 						</li>
 					{/each}
+					{#if training.routes.length > 0}
+						<li class="flex items-center gap-1.5">
+							<span class="cardio-dot" aria-hidden="true"></span>
+							Cardio
+						</li>
+					{/if}
 					{#if planned > 0}
 						<li class="flex items-center gap-1.5">
 							<span class="bg-muted inline-block size-3 rounded-sm border" aria-hidden="true"></span>
@@ -337,9 +375,7 @@
 				{#if daysLoading && !info}
 					Lade …
 				{:else if trained(info)}
-					{selectedWorkouts.length > 0
-						? selectedWorkouts.map((w) => w.name).join(', ')
-						: 'Training'}
+					{selectedNames.length > 0 ? selectedNames.join(', ') : 'Training'}
 				{:else if selected > todayIso}
 					{planDays.has(weekdayId(selected)) ? 'Geplanter Trainingstag' : 'Kein Trainingstag geplant'}
 				{:else}
@@ -350,7 +386,7 @@
 
 		{#if trained(info) || selected <= todayIso}
 			<Card.Content class="flex flex-col gap-4">
-				{#if trained(info)}
+				{#if strength(info)}
 					<dl class="grid grid-cols-2 gap-3">
 						<div class="bg-muted/50 rounded-lg p-3">
 							<dt class="text-muted-foreground text-xs">Übungen</dt>
@@ -363,6 +399,31 @@
 							</dd>
 						</div>
 					</dl>
+				{/if}
+				{#if info?.cardio?.length}
+					<ul class="divide-y rounded-lg border" aria-label="Cardio">
+						{#each info.cardio as r (r.id)}
+							<li>
+								<a href="/training/cardio/{r.id}" class="flex min-h-11 items-center gap-3 px-3 py-2">
+									<span class="cardio-dot shrink-0" aria-hidden="true"></span>
+									<span class="flex min-w-0 flex-1 flex-col">
+										<span class="truncate text-sm font-medium">
+											{kindLabel(r.kind)}
+											<span class="text-muted-foreground font-normal">{timeOf(r.started)}</span>
+										</span>
+										<span class="text-muted-foreground text-xs tabular-nums">
+											{formatDistance(r.distance)} · {formatDuration(r.duration ?? 0)} · {formatPace(
+												r.kind,
+												r.distance,
+												r.duration
+											)}
+										</span>
+									</span>
+									<ChevronRightIcon class="text-muted-foreground size-4 shrink-0" />
+								</a>
+							</li>
+						{/each}
+					</ul>
 				{/if}
 				{#if selected <= todayIso}
 					<DayWeight date={selected} />
@@ -422,6 +483,15 @@
 	}
 	.slot-0 {
 		--dot: var(--muted-foreground);
+	}
+	/* Cardio als Ring statt Punkt: unterscheidet sich ohne eigene Farbe von
+	   jedem Training. */
+	.cardio-dot {
+		display: inline-block;
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 9999px;
+		border: 1.5px solid currentColor;
 	}
 	.slot-1 {
 		--dot: #2a78d6;

@@ -4,12 +4,15 @@
 	import TimerIcon from '@lucide/svelte/icons/timer';
 	import DumbbellIcon from '@lucide/svelte/icons/dumbbell';
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
+	import BikeIcon from '@lucide/svelte/icons/bike';
+	import FootprintsIcon from '@lucide/svelte/icons/footprints';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import UserCheckIcon from '@lucide/svelte/icons/user-check';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
 	import { formatDate, formatDuration, today } from '$lib/training.svelte.js';
+	import { kindLabel, formatDistance, formatPace } from '$lib/cardio.svelte.js';
 	import { feed, syncFeed, loadMore, hasKudos, toggleKudos } from '$lib/training-feed.svelte.js';
 	import { syncFollows, isFollowing, follow, unfollow } from '$lib/training-follows.svelte.js';
 	import TrainingTabs from '../TrainingTabs.svelte';
@@ -158,6 +161,25 @@
 									</span>
 								{/if}
 							</p>
+							{#if Array.isArray(post.cardio)}
+								{#each post.cardio as c, i (i)}
+									<p class="flex items-center gap-1.5 text-sm">
+										{#if c.kind === 'bike'}
+											<BikeIcon class="text-primary size-4 shrink-0" />
+										{:else}
+											<FootprintsIcon class="text-primary size-4 shrink-0" />
+										{/if}
+										<span class="font-medium">{kindLabel(c.kind)}</span>
+										<span class="text-muted-foreground tabular-nums">
+											{formatDistance(c.distance)} · {formatDuration(c.duration ?? 0)} · {formatPace(
+												c.kind,
+												c.distance,
+												c.duration
+											)}
+										</span>
+									</p>
+								{/each}
+							{/if}
 							{#if post.records?.length}
 								<p class="flex items-start gap-1.5 text-sm">
 									<TrophyIcon class="text-primary mt-0.5 size-4 shrink-0" />

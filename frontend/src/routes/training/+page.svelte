@@ -39,6 +39,7 @@
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import TrainingTabs from './TrainingTabs.svelte';
+	import EntryMode from './EntryMode.svelte';
 	import EntryExercise from './EntryExercise.svelte';
 	import EntryRestTimer from './EntryRestTimer.svelte';
 	import EntryCheer, { makeCheer } from './EntryCheer.svelte';
@@ -329,6 +330,7 @@
 
 <main class="flex flex-1 flex-col gap-4 px-3 py-4 {restVisible ? 'pb-32' : ''}">
 	<TrainingTabs />
+	<EntryMode />
 
 	{#if training.error}
 		<Alert.Root variant="destructive">

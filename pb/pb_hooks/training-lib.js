@@ -95,8 +95,9 @@ function nextWorkout(app, userId, today) {
 }
 
 /**
- * Steht fuer `date` schon ein Satz im Verlauf (oder eine Dauer)? Dann braucht es
- * keine Erinnerung mehr. Ein Eintrag nur mit Notiz zaehlt nicht als Training.
+ * Steht fuer `date` schon ein Satz im Verlauf (oder eine Dauer, eine Strecke)?
+ * Dann braucht es keine Erinnerung mehr. Ein Eintrag nur mit Notiz zaehlt nicht
+ * als Training.
  */
 function trainedOn(app, userId, date) {
 	const params = { uid: userId, d: date };
@@ -106,7 +107,8 @@ function trainedOn(app, userId, date) {
 		if (raw && raw !== 'null' && raw !== '[]') return true;
 	}
 	return (
-		app.findRecordsByFilter('training_sessions', 'user = {:uid} && date = {:d}', '', 1, 0, params).length > 0
+		app.findRecordsByFilter('training_sessions', 'user = {:uid} && date = {:d}', '', 1, 0, params).length > 0 ||
+		app.findRecordsByFilter('training_routes', 'user = {:uid} && date = {:d}', '', 1, 0, params).length > 0
 	);
 }
 
@@ -227,6 +229,17 @@ function sendDueReminders(app, now) {
 
 // --- Feed (Migration 1789909200) --------------------------------------------
 
+/** Wie KINDS in frontend/src/lib/cardio.svelte.js. */
+const CARDIO_LABELS = { run: 'Laufen', bike: 'Radfahren', walk: 'Gehen' };
+/** Mehr Strecken an einem Tag fasst der Beitrag nicht (maxSize 4000). */
+const CARDIO_MAX = 20;
+
+/** 5234 -> "5,2 km", 850 -> "850 m" */
+function formatKm(m) {
+	if (m < 1000) return `${Math.round(m)} m`;
+	return `${(Math.round(m / 100) / 10).toString().replace('.', ',')} km`;
+}
+
 /** Die Saetze eines Eintrags als Liste; Unlesbares ergibt []. */
 function parseSets(log) {
 	try {
@@ -272,6 +285,13 @@ function rebuildPost(app, userId, date) {
 	const sessions = app.findRecordsByFilter('training_sessions', 'user = {:uid} && date = {:d}', '', 1, 0, params);
 	const session = sessions.length > 0 ? sessions[0] : null;
 	const duration = session ? session.getInt('duration') : 0;
+	// Nur Kennzahlen der Strecken, nie die Punkte (Migration 1790514000).
+	const routes = app.findRecordsByFilter('training_routes', 'user = {:uid} && date = {:d}', 'started', CARDIO_MAX, 0, params);
+	const cardio = [];
+	for (let i = 0; i < routes.length; i++) {
+		const r = routes[i];
+		cardio.push({ kind: r.getString('kind'), distance: r.getInt('distance'), duration: r.getInt('duration') });
+	}
 
 	const counts = {};
 	const records = [];
@@ -317,7 +337,7 @@ function rebuildPost(app, userId, date) {
 		}
 	}
 
-	if (exercises === 0 && duration === 0) {
+	if (exercises === 0 && duration === 0 && cardio.length === 0) {
 		if (existing) app.delete(existing);
 		return null;
 	}
@@ -345,6 +365,7 @@ function rebuildPost(app, userId, date) {
 	post.set('sets', sets);
 	post.set('volume', Math.round(volume));
 	post.set('records', records);
+	post.set('cardio', cardio);
 	app.save(post);
 	return existing ? null : post;
 }
@@ -379,7 +400,20 @@ function notifyFollowers(app, post) {
 		// Account weg.
 	}
 	who = who || 'Jemand';
-	const what = post.getString('workout');
+	// Ohne Kraft-Training steht die erste Strecke da: "Laufen 5,2 km".
+	let what = post.getString('workout');
+	if (!what) {
+		let cardio = [];
+		try {
+			cardio = JSON.parse(post.getString('cardio') || '[]');
+		} catch {
+			// Dann eben der allgemeine Text.
+		}
+		if (Array.isArray(cardio) && cardio.length > 0 && cardio[0]) {
+			const c = cardio[0];
+			what = `${CARDIO_LABELS[c.kind] || 'Cardio'} ${formatKm(Number(c.distance) || 0)}`;
+		}
+	}
 	return pushLib.broadcast(app, subscriptions, {
 		title: `${who} hat trainiert`,
 		body: what ? `${what} – jetzt im Feed.` : 'Das Training steht jetzt im Feed.',

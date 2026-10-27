@@ -48,6 +48,8 @@ export const training = $state({
 	exercises: [],
 	logs: [],
 	sessions: [],
+	/** Juengste Cardio-Strecken ohne Punkte (Migration 1790427600), fuer den Kalender. */
+	routes: [],
 	loading: true,
 	error: null
 });
@@ -109,6 +111,9 @@ export function trainingError(err, fallback) {
 	return first?.message ?? err?.message ?? fallback;
 }
 
+/** Felder einer Strecke ohne die Punkte -- die braucht nur die Karte. */
+const ROUTE_FIELDS = 'id,date,kind,started,duration,distance';
+
 /**
  * Laedt Plan, Trainings, Uebungen und Verlauf. Aufruf aus einem $effect heraus;
  * der Rueckgabewert ist das Teardown.
@@ -121,6 +126,7 @@ export function syncTraining(userId) {
 		training.exercises = [];
 		training.logs = [];
 		training.sessions = [];
+		training.routes = [];
 	}
 	training.loading = loadedFor !== userId;
 	training.error = null;
@@ -134,15 +140,17 @@ export function syncTraining(userId) {
 		// sind knapp 1000 Zeilen. Fuer "Letztes Mal" und den Vorschlag reicht das;
 		// der ganze Verlauf einer Uebung kommt aus loadExerciseLogs().
 		pb.collection('training_logs').getList(1, 1000, { filter, sort: '-date' }),
-		pb.collection('training_sessions').getList(1, 100, { filter, sort: '-date' })
+		pb.collection('training_sessions').getList(1, 100, { filter, sort: '-date' }),
+		pb.collection('training_routes').getList(1, 100, { filter, sort: '-started', fields: ROUTE_FIELDS })
 	])
-		.then(([plans, workouts, exercises, logs, sessions]) => {
+		.then(([plans, workouts, exercises, logs, sessions, routes]) => {
 			if (cancelled) return;
 			training.plan = plans[0] ?? null;
 			training.workouts = workouts;
 			training.exercises = exercises;
 			training.logs = logs.items;
 			training.sessions = sessions.items;
+			training.routes = routes.items;
 			training.loading = false;
 			loadedFor = userId;
 		})
@@ -509,7 +517,8 @@ export function loadExerciseLogs(exerciseId) {
 
 /**
  * Wer an welchen Tagen von `from` bis `to` (je "YYYY-MM-DD", inklusive)
- * trainiert hat: `{ logs, sessions }`, die Eintraege nur mit Datum, Uebung und Saetzen.
+ * trainiert hat: `{ logs, sessions, routes }`, die Eintraege nur mit Datum, Uebung und
+ * Saetzen, die Strecken ohne Punkte.
  */
 export async function loadDays(from, to) {
 	const filter = pb.filter('user = {:u} && date >= {:from} && date <= {:to}', {
@@ -517,11 +526,14 @@ export async function loadDays(from, to) {
 		from,
 		to
 	});
-	const [logs, sessions] = await Promise.all([
+	const [logs, sessions, routes] = await Promise.all([
 		pb.collection('training_logs').getFullList({ filter, fields: 'id,date,exercise,sets', requestKey: null }),
-		pb.collection('training_sessions').getFullList({ filter, requestKey: null })
+		pb.collection('training_sessions').getFullList({ filter, requestKey: null }),
+		pb
+			.collection('training_routes')
+			.getFullList({ filter, sort: 'started', fields: ROUTE_FIELDS, requestKey: null })
 	]);
-	return { logs, sessions };
+	return { logs, sessions, routes };
 }
 
 // --- Dauer ------------------------------------------------------------------

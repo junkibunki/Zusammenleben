@@ -19,8 +19,8 @@ const checkLog = (e) => {
 onRecordCreateRequest(checkLog, 'training_logs');
 onRecordUpdateRequest(checkLog, 'training_logs');
 
-// Feed (Migration 1789909200): nach jeder Aenderung an Eintraegen oder Dauer
-// den Beitrag des Tages neu berechnen. Ein Fehler hier darf das Speichern des
+// Feed (Migration 1789909200): nach jeder Aenderung an Eintraegen, Dauer oder
+// Strecken (Cardio, Migration 1790514000) den Beitrag des Tages neu berechnen. Ein Fehler hier darf das Speichern des
 // Trainings nicht scheitern lassen -- der Feed ist Beiwerk.
 // In einer Transaktion: saveDay() speichert alle Uebungen eines Tages parallel,
 // und ohne Serialisierung legten zwei Requests denselben Beitrag an (einer
@@ -52,9 +52,9 @@ const syncPost = (e) => {
 	}
 	e.next();
 };
-onRecordAfterCreateSuccess(syncPost, 'training_logs', 'training_sessions');
-onRecordAfterUpdateSuccess(syncPost, 'training_logs', 'training_sessions');
-onRecordAfterDeleteSuccess(syncPost, 'training_logs', 'training_sessions');
+onRecordAfterCreateSuccess(syncPost, 'training_logs', 'training_sessions', 'training_routes');
+onRecordAfterUpdateSuccess(syncPost, 'training_logs', 'training_sessions', 'training_routes');
+onRecordAfterDeleteSuccess(syncPost, 'training_logs', 'training_sessions', 'training_routes');
 
 // Schulterklopfer: nur `kudos` aendern, nur sich selbst, nie beim eigenen
 // Beitrag (das schliesst schon die UpdateRule aus). Wie die Likes der Ideen,

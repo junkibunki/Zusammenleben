@@ -28,6 +28,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import TrainingTabs from '../TrainingTabs.svelte';
+	import EntryMode from '../EntryMode.svelte';
 	import CardioMap from './CardioMap.svelte';
 	import CardioLock from './CardioLock.svelte';
 
@@ -130,6 +131,7 @@
 
 <main class="flex flex-1 flex-col gap-4 px-3 py-4">
 	<TrainingTabs />
+	<EntryMode />
 
 	<Card.Root>
 		<Card.Header>
