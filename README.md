@@ -13,7 +13,7 @@ Ein einziger Prozess (PocketBase) liefert API **und** Frontend auf demselben Por
 | **Ausgaben** (`/ausgaben`) | Beträge auf ausgewählte Bewohner aufteilen (auf den Cent), auch Erstattungen als negative Beträge. Salden, wer wem was schuldet, Begleichen per Tipp. |
 | **Wünsch dir was** (`/wuensche`) | Geschenkewünsche. Die eigenen sieht man nach dem Speichern nie wieder – nur einen Zähler. |
 | **Ideen** (`/ideen`) | App-weiter Feed mit Erweiterungsvorschlägen; abhaken als „umgesetzt“ oder „abgelehnt“, liken (nicht die eigene Idee). Offene Ideen sortiert nach Likes. |
-| **Training** (`/training`) | Privater Trainingsplan: mehrere Trainings mit Übungen, Gewichte eintragen, das Gewicht vom letzten Mal daneben, Push-Erinnerung an gewählten Wochentagen. Steht nur im Menü, wenn im Profil „Training anzeigen“ an ist. |
+| **Training** (`/training`) | Privater Trainingsplan: mehrere Trainings mit Übungen, Gewichte eintragen, das Gewicht vom letzten Mal daneben, Push-Erinnerung an gewählten Wochentagen. Steht nur im Menü, wenn im Profil „Training anzeigen“ an ist. Im Feed: Trainings der anderen, Schulterklopfer, Personen folgen (Push, sobald sie ein Training veröffentlichen). |
 | **Einstellungen** (`/einstellungen`) | Kategorien des Haushalts anlegen, umbenennen, sortieren, löschen; Name des Autos. Nur für Haupt-Mitglieder. |
 | **Bewohner** (`/residents`) | Wer im aktiven Haushalt einen Account hat. |
 | **Haushalte** (`/haushalte`) | Wechsel des aktiven Haushalts, wenn man in mehreren Mitglied ist. |
@@ -126,7 +126,7 @@ warum sie so aussieht. Überblick:
 
 | Collection | Inhalt | Wer darf |
 | ---------- | ------ | -------- |
-| `users` | Accounts mit `name`, `avatar`, `show_training` | Selbstregistrierung aus (`createRule = null`); sichtbar sind man selbst und Mitbewohner |
+| `users` | Accounts mit `name`, `avatar`, `show_training`, `training_public` | Selbstregistrierung aus (`createRule = null`); sichtbar sind man selbst, Mitbewohner und alle mit eingeschaltetem Training |
 | `households` | `name`, `car_name` | nur Superuser schreibt |
 | `memberships` | `user`, `household`, `role` (`haupt`/`gast`), `until` | nur Superuser schreibt |
 | `items` | Einkaufszettel: `name`, `quantity`, `note`, `category`, `done`, `added_by`, `done_by` | laufende Mitglieder des Haushalts |
@@ -136,6 +136,8 @@ warum sie so aussieht. Überblick:
 | `wishes` | `text`, `wisher` | Mitglieder, aber **nie** der Wünschende selbst |
 | `ideas` | `text`, `status`, `likes`, `author` | alle Eingeloggten, app-weit; löschen nur Superuser |
 | `training_*` | `plans`, `workouts`, `exercises`, `logs` | nur die eigene Person |
+| `training_posts` | Feed: ein Beitrag pro Person und Tag, nur Kennzahlen; `kudos` | lesen: alle Eingeloggten (nur von öffentlich Trainierenden); schreiben nur Server, `kudos` jeder nur sich selbst |
+| `training_follows` | `follower`, `followed` – wer wem folgt | nur die eigenen Zeilen; folgen nur Accounts mit eingeschaltetem Training |
 | `push_subscriptions` | ein Datensatz je Gerät | nur die eigene Person |
 | `push_config` | Record `vapid` mit dem Schlüsselpaar des Servers | nur Superuser |
 
@@ -162,7 +164,7 @@ Was in `pb/pb_hooks/` liegt:
 | `expenses.pb.js` | Zahler und Teilnehmer müssen zum Haushalt gehören |
 | `wishes.pb.js` | Doppelte Wünsche abfangen, Zähler-Route für die eigenen |
 | `ideas.pb.js` | Likes: nur sich selbst, nicht die eigene Idee; `author` steht fest |
-| `training.pb.js`, `training-lib.js` | Cron jede Minute: Trainingserinnerung nach deutscher Zeit |
+| `training.pb.js`, `training-lib.js` | Cron jede Minute: Trainingserinnerung nach deutscher Zeit; Feed-Beitrag nachziehen; Push an Follower beim ersten Beitrag des Tages, Push bei Schulterklopfer |
 
 ---
 

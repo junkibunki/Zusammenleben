@@ -6,10 +6,14 @@
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
+	import UserCheckIcon from '@lucide/svelte/icons/user-check';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
 	import { formatDate, formatDuration, today } from '$lib/training.svelte.js';
 	import { feed, syncFeed, loadMore, hasKudos, toggleKudos } from '$lib/training-feed.svelte.js';
+	import { syncFollows, isFollowing, follow, unfollow } from '$lib/training-follows.svelte.js';
 	import TrainingTabs from '../TrainingTabs.svelte';
+	import FollowPeople from './FollowPeople.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
@@ -17,12 +21,17 @@
 
 	// Wer hat trainiert -- alle Nutzer der App, die ihre Trainings oeffentlich
 	// machen (Profil), plus die eigenen. Lob heisst hier "Schulterklopfer".
+	// Personen folgen (Push bei neuem Training): FollowPeople.svelte, dazu der
+	// Knopf am Beitrag.
 
 	const userId = $derived(auth.user?.id ?? '');
 	const isPublic = $derived(Boolean(auth.user?.training_public));
 
 	$effect(() => {
 		if (userId) return syncFeed();
+	});
+	$effect(() => {
+		if (userId) return syncFollows();
 	});
 
 	function label(user) {
@@ -70,6 +79,8 @@
 		{/if}
 	</div>
 
+	<FollowPeople />
+
 	{#if feed.error}
 		<Alert.Root variant="destructive">
 			<AlertCircleIcon />
@@ -93,6 +104,7 @@
 				{@const klopft = hasKudos(post, userId)}
 				{@const count = post.kudos?.length ?? 0}
 				{@const photo = avatarUrl(author, '100x100')}
+				{@const following = !own && isFollowing(post.user)}
 				<li>
 					<Card.Root class="gap-3 py-4">
 						<Card.Header class="flex items-center gap-3 px-4">
@@ -109,6 +121,18 @@
 								</p>
 								<p class="text-muted-foreground text-xs">{when(post.date)}</p>
 							</div>
+							{#if !own}
+								<Button
+									variant="ghost"
+									size="icon"
+									class="size-11 shrink-0 touch-manipulation"
+									aria-label={following ? `${label(author)} nicht mehr folgen` : `${label(author)} folgen`}
+									aria-pressed={following}
+									onclick={() => (following ? unfollow(post.user) : follow(author ?? { id: post.user }))}
+								>
+									{#if following}<UserCheckIcon class="text-primary" />{:else}<UserPlusIcon />{/if}
+								</Button>
+							{/if}
 						</Card.Header>
 
 						<Card.Content class="flex flex-col gap-2 px-4">

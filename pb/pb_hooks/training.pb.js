@@ -25,14 +25,30 @@ onRecordUpdateRequest(checkLog, 'training_logs');
 // In einer Transaktion: saveDay() speichert alle Uebungen eines Tages parallel,
 // und ohne Serialisierung legten zwei Requests denselben Beitrag an (einer
 // scheitert am Unique-Index) oder der mit dem aelteren Stand schriebe zuletzt.
+//
+// Entsteht dabei ein neuer Beitrag, erfahren das die Follower per Push
+// (Migration 1790254800) -- erst *nach* der Transaktion: der Versand dauert
+// bis zu neun Sekunden, und solange soll die Datenbank nicht gesperrt sein.
+// Das Ergebnis ueber eine Variable herausreichen: der Transaktions-Callback
+// ist in Go ein `func(txApp) error`, sein Rueckgabewert ist kein Datenkanal.
 const syncPost = (e) => {
+	let fresh = null;
 	try {
 		const lib = require(`${__hooks}/training-lib.js`);
 		const user = e.record.getString('user');
 		const date = e.record.getString('date');
-		e.app.runInTransaction((txApp) => lib.rebuildPost(txApp, user, date));
+		e.app.runInTransaction((txApp) => {
+			fresh = lib.rebuildPost(txApp, user, date);
+		});
 	} catch (err) {
 		e.app.logger().warn('Feed-Beitrag nicht aktualisiert', 'record', e.record.id, 'fehler', String(err));
+	}
+	if (fresh) {
+		try {
+			require(`${__hooks}/training-lib.js`).notifyFollowers(e.app, fresh);
+		} catch (err) {
+			e.app.logger().warn('Follower-Push fehlgeschlagen', 'post', fresh.id, 'fehler', String(err));
+		}
 	}
 	e.next();
 };

@@ -246,13 +246,17 @@ function parseSets(log) {
  * blendet die Rule aus); ein vorhandener wird aber weiter nachgezogen, damit
  * nach dem Wiedereinschalten nichts Geloeschtes auftaucht. Ist an dem Tag
  * nichts mehr trainiert, verschwindet der Beitrag samt Schulterklopfern.
+ *
+ * Liefert den Beitrag, wenn er gerade *entstanden* ist (das ist der Moment
+ * "Training veroeffentlicht", den die Follower per Push erfahren), sonst null.
+ * Den Push schickt der Aufrufer nach der Transaktion -- nicht hier drin.
  */
 function rebuildPost(app, userId, date) {
 	let user;
 	try {
 		user = app.findRecordById('users', userId);
 	} catch {
-		return;
+		return null;
 	}
 
 	const params = { uid: userId, d: date };
@@ -262,7 +266,7 @@ function rebuildPost(app, userId, date) {
 	} catch {
 		// Noch keiner.
 	}
-	if (!existing && !user.getBool('training_public')) return;
+	if (!existing && !user.getBool('training_public')) return null;
 
 	const logs = app.findRecordsByFilter('training_logs', 'user = {:uid} && date = {:d}', '', 200, 0, params);
 	const sessions = app.findRecordsByFilter('training_sessions', 'user = {:uid} && date = {:d}', '', 1, 0, params);
@@ -315,7 +319,7 @@ function rebuildPost(app, userId, date) {
 
 	if (exercises === 0 && duration === 0) {
 		if (existing) app.delete(existing);
-		return;
+		return null;
 	}
 
 	if (session && session.getString('workout') && !(session.getString('workout') in counts)) {
@@ -342,6 +346,48 @@ function rebuildPost(app, userId, date) {
 	post.set('volume', Math.round(volume));
 	post.set('records', records);
 	app.save(post);
+	return existing ? null : post;
+}
+
+/**
+ * Push an alle, die dem Besitzer von `post` folgen (Migration 1790254800):
+ * die Person hat ein Training veroeffentlicht. Nur bei einem neuen Beitrag,
+ * also einmal pro Person und Tag -- die vielen Updates danach (jede Uebung
+ * wird einzeln gespeichert) loesen nichts aus.
+ */
+function notifyFollowers(app, post) {
+	const pushLib = require(`${__hooks}/push-lib.js`);
+	const owner = post.getString('user');
+	const follows = app.findRecordsByFilter('training_follows', 'followed = {:uid}', '', 500, 0, { uid: owner });
+	if (follows.length === 0) return 0;
+
+	let subscriptions = [];
+	for (let i = 0; i < follows.length; i++) {
+		const uid = follows[i].getString('follower');
+		if (!uid || uid === owner) continue;
+		subscriptions = subscriptions.concat(
+			app.findRecordsByFilter('push_subscriptions', 'user = {:uid}', '-created', 50, 0, { uid })
+		);
+	}
+	if (subscriptions.length === 0) return 0;
+
+	// Nur der Name, nie der E-Mail-Fallback -- wie bei notifyKudos.
+	let who = '';
+	try {
+		who = app.findRecordById('users', owner).getString('name').trim();
+	} catch {
+		// Account weg.
+	}
+	who = who || 'Jemand';
+	const what = post.getString('workout');
+	return pushLib.broadcast(app, subscriptions, {
+		title: `${who} hat trainiert`,
+		body: what ? `${what} – jetzt im Feed.` : 'Das Training steht jetzt im Feed.',
+		// Pro Beitrag: taucht er nach dem Loeschen am selben Tag neu auf, ist das
+		// eine neue Meldung.
+		tag: `einkauf-follow-${post.id}`,
+		url: '/training/feed'
+	});
 }
 
 /** Push an den Besitzer eines Beitrags: `fromId` hat auf die Schulter geklopft. */
@@ -372,4 +418,4 @@ function notifyKudos(app, post, fromId) {
 	});
 }
 
-module.exports = { berlin, sendDueReminders, normalizeLog, rebuildPost, notifyKudos };
+module.exports = { berlin, sendDueReminders, normalizeLog, rebuildPost, notifyKudos, notifyFollowers };
