@@ -1,8 +1,13 @@
 // Skaliert scripts/icon-source.png auf die App-Icons in static/ -- ohne
 // Abhaengigkeiten (nur node:zlib). Neu bauen mit:  node scripts/generate-icons.mjs
 //
-// Die Quelle liegt bewusst *nicht* in static/: sie waere sonst als /icon.png
-// ausgeliefert und landete in jedem Build (2,4 MB fuer nichts).
+// Die Quelle ist Pixelart: ein 32x32-Raster (der Drache aus DragonSprite.svelte
+// mit Einkaufszettel), jedes Rasterpixel als 16x16-Block, also 512x512.
+// Beim Bearbeiten auf diesem Raster bleiben, sonst werden die Kanten unscharf
+// (siehe resize()).
+//
+// Die Quelle liegt bewusst *nicht* in static/: sie waere sonst als /icon-source.png
+// ausgeliefert und landete in jedem Build.
 import { deflateSync, inflateSync } from 'node:zlib';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -111,7 +116,8 @@ function decode(file) {
 
 // Ein Foto braucht Zeilenfilter: unfiltriert bleibt jedes Pixel ein eigener
 // Wert und deflate findet nichts zu wiederholen. Mit Filter stehen dort kleine
-// Differenzen zum Nachbarn -- gemessen 645 KB -> 439 KB beim 512er. Dazu ohne
+// Differenzen zum Nachbarn -- beim frueheren Foto-Icon gemessen 645 KB -> 439 KB
+// beim 512er. Pixelart schadet es nicht. Dazu ohne
 // Alphakanal speichern, wenn keiner gebraucht wird (ein Viertel der Rohdaten).
 function encode(size, rgba) {
 	let opaque = true;
@@ -187,9 +193,10 @@ function encode(size, rgba) {
 
 // --- Skalieren ---------------------------------------------------------
 // Flaechenmittel (Box-Filter): jedes Zielpixel ist der Durchschnitt aller
-// Quellpixel, die es ueberdeckt. Bei 1254 -> 192 sind das ~43 Pixel; ein
-// naives Sampling wuerde 42 davon wegwerfen und in den feinen Baeumen und
-// Wasserspiegelungen sichtbar flimmern.
+// Quellpixel, die es ueberdeckt. Fuer die Pixelart heisst das: solange jede
+// Zielgroesse ein Vielfaches des 32er-Rasters ist (32, 192, 512 = 1, 6, 16
+// Pixel je Rasterpixel), liegt jedes Zielpixel ganz in einem Rasterpixel und
+// die Kanten bleiben hart. Eine Groesse wie 180 wuerde sie verwischen.
 function resize(src, size) {
 	if (src.w !== src.h) throw new Error(`Quelle ist ${src.w}x${src.h}, erwartet quadratisch`);
 	const out = Buffer.alloc(size * size * 4);
@@ -238,13 +245,14 @@ function resize(src, size) {
 const src = decode(SRC);
 console.log(`Quelle: ${src.w}x${src.h}`);
 
-// 32 als Favicon (der 192er waere 72 KB auf jedem Seitenaufruf),
+// 32 als Favicon (beim frueheren Foto-Icon waere der 192er 72 KB auf jedem
+// Seitenaufruf gewesen; die eigene Groesse bleibt fuer den Browser-Tab passend),
 // 192 fuer den Install-Prompt und als apple-touch-icon (iOS: 180, skaliert),
 // 512 fuer Splashscreen und Android-Adaptive-Icon.
-// Kein eigenes maskable-PNG: das Bild ist randlos, ein Beschnitt auf die
-// Safe-Zone trifft nur Himmel und Baumkronen -- deshalb steht am 512er im
-// Manifest "any maskable". Ein aufgepolsterter Rand waere hier das
-// haesslichere Ergebnis.
+// Kein eigenes maskable-PNG: der Himmel laeuft bis an den Rand, ein Beschnitt
+// auf die Safe-Zone trifft fast nur Himmel -- deshalb steht am 512er im
+// Manifest "any maskable". Bei einer kreisrunden Maske fehlen die Spitzen der
+// Hoerner und die untere Zettelkante; das Motiv bleibt erkennbar.
 for (const size of [32, 192, 512]) {
 	const data = encode(size, resize(src, size));
 	const name = `icon-${size}.png`;

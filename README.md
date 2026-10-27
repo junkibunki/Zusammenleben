@@ -410,8 +410,15 @@ liegt bewusst **nicht** in `static/` – dort würde sie in Originalgröße mit 
 Das Skript braucht keine Abhängigkeiten (nur `node:zlib`): es dekodiert das PNG selbst,
 skaliert per Flächenmittel und kodiert wieder.
 
+Das aktuelle Icon ist Pixelart: der Drache aus `DragonSprite.svelte` mit Einkaufszettel
+auf einem 32×32-Raster, als 512×512 abgelegt (16 px je Rasterpixel). Die Kanten bleiben
+nur hart, weil alle drei Zielgrößen ein Vielfaches von 32 sind – wer das Icon ändert,
+bleibt auf dem Raster.
+
 Es gibt **kein separates `maskable`-Icon**. Android beschneidet ein maskable-Icon auf die
-Safe-Zone (innere 80 %); bei einem randlosen Bild trifft das nur den Rand, deshalb steht
+Safe-Zone (innere 80 %); beim Drachen-Icon trifft das fast nur Himmel – bei einer
+kreisrunden Maske fehlen die Spitzen der Hörner und die untere Zettelkante, das Motiv
+bleibt aber erkennbar. Deshalb steht
 am 512er im Manifest `"purpose": "any maskable"`. Ein Icon mit freistehendem Logo auf
 transparentem Grund bräuchte stattdessen eine zweite, kleiner skalierte Variante.
 
