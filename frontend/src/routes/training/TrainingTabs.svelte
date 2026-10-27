@@ -6,17 +6,19 @@
 	// Koerpergewicht am gewaehlten Tag im Kalender.
 	const TABS = [
 		{ href: '/training', label: 'Eintragen' },
+		{ href: '/training/cardio', label: 'Cardio' },
 		{ href: '/training/kalender', label: 'Kalender' },
 		{ href: '/training/feed', label: 'Feed' }
 	];
 </script>
 
-<nav aria-label="Training" class="bg-muted grid grid-cols-3 gap-1 rounded-lg p-1">
+<nav aria-label="Training" class="bg-muted grid grid-cols-4 gap-1 rounded-lg p-1">
 	{#each TABS as tab (tab.href)}
-		<!-- Der Koerpergewicht-Verlauf haengt am Kalender. -->
+		<!-- Der Koerpergewicht-Verlauf haengt am Kalender, eine Strecke an Cardio. -->
 		{@const active =
 			page.url.pathname === tab.href ||
-			(tab.href === '/training/kalender' && page.url.pathname === '/training/koerpergewicht')}
+			(tab.href === '/training/kalender' && page.url.pathname === '/training/koerpergewicht') ||
+			(tab.href === '/training/cardio' && page.url.pathname.startsWith('/training/cardio/'))}
 		<a
 			href={tab.href}
 			aria-current={active ? 'page' : undefined}
