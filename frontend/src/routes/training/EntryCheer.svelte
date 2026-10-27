@@ -1,19 +1,13 @@
 <script module>
-	const TITLES = ['Wuhu, geschafft!', 'Jawoll!', 'Stark, richtig stark!', 'Training im Kasten!'];
+	const TITLES = ['Wuhu, geschafft!', 'Jawoll!', 'Stark, richtig stark!', 'Training im Kasten!', 'Juuubel'];
 
 	const LINES = [
-		'Das Sofa hat heute verloren.',
-		'Deine Muskeln schreiben dir gerade einen Dankesbrief.',
 		'Die Hanteln zittern schon, wenn du reinkommst.',
 		'Schwerkraft 0, du 1.',
-		'Heute geschwitzt, morgen angegeben.',
-		'Beast Mode: gespeichert.',
-		'Gains werden geladen … bitte nicht ausschalten.',
-		'Die Treppe von morgen hat jetzt schon Angst.',
-		'Pizza heute? Hast du dir verdient. Fast.',
 		'Muskelkater ist nur der Applaus von innen.',
 		'Irgendwo wird gerade ein Proteinshake nervös.',
-		'Wenn Schweiß glitzern könnte, wärst du eine Discokugel.'
+		'Wenn Schweiß glitzern könnte, wärst du eine Discokugel.',
+		'„Gewinne kannste des Ding eh net, weil de Bob Tschigerillo macht mit …“ – nach dem Training hat sich’s ausgebobbt.'
 	];
 
 	const pick = (list) => list[Math.floor(Math.random() * list.length)];
