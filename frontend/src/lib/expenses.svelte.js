@@ -220,8 +220,10 @@ export async function addExpense({ id, title, amountCents, paidBy, sharedWith })
  * und die nur auf den Glaeubiger geteilt wird. Das hebt in `computeSettlement`
  * genau diese Paarschuld auf. Das Geld selbst fliesst ausserhalb der App.
  *
- * `from` ist in der Praxis der eigene Account -- die Seite bietet es nur fuer
- * die eigenen Schulden an.
+ * `from` ist in der Praxis der eigene Account -- die Seite bietet es fuer die
+ * eigenen Schulden an. Umgekehrt (`to` = ich) nur, wenn der Schuldner nicht
+ * mehr im Haushalt ist und selbst nichts mehr eintragen kann. `toName` steht
+ * im Titel, `otherName` (die Gegenseite, nicht ich) in Fehlermeldungen.
  *
  * `id` wie bei `addExpense`: ein zweiter Versuch nach verlorener Antwort soll
  * denselben Eintrag treffen, nicht einen zweiten Ausgleich anlegen.
@@ -232,7 +234,7 @@ export async function addExpense({ id, title, amountCents, paidBy, sharedWith })
  *
  * @returns wie `addExpense`
  */
-export async function settleDebt({ id, from, to, cents, toName }) {
+export async function settleDebt({ id, from, to, cents, toName, otherName }) {
 	if (!from || !to || from === to) throw userError('Diese Schuld lässt sich nicht begleichen.');
 	try {
 		return await addExpense({
@@ -243,11 +245,19 @@ export async function settleDebt({ id, from, to, cents, toName }) {
 			sharedWith: [to]
 		});
 	} catch (err) {
-		// Der Hook (expenses.pb.js) laesst nur aktuelle Mitglieder in die
-		// Aufteilung -- ein Gast, dessen Zeit abgelaufen ist, faellt hier heraus.
-		if (err?.response?.data?.shared_with?.code === 'expense_not_member') {
+		// Der Hook (expenses.pb.js) laesst ehemalige Mitglieder nur bis zur
+		// offenen Paarschuld zu -- war inzwischen schon jemand schneller, ist sie
+		// kleiner als angezeigt. Wer nie Mitglied war, faellt ganz heraus.
+		const data = err?.response?.data;
+		if (data?.amount_cents?.code === 'expense_settle_exceeds') {
+			throw userError('Der Ausgleich ist höher als die offene Schuld — bitte die Übersicht prüfen.');
+		}
+		if (
+			data?.shared_with?.code === 'expense_not_member' ||
+			data?.paid_by?.code === 'expense_not_member'
+		) {
 			throw userError(
-				`${toName || 'Diese Person'} gehört nicht mehr zum Haushalt — der Ausgleich lässt sich nicht eintragen.`
+				`${otherName || toName || 'Diese Person'} gehört nicht zum Haushalt — der Ausgleich lässt sich nicht eintragen.`
 			);
 		}
 		throw err;
@@ -404,6 +414,20 @@ export function computeSettlement(items) {
 
 	debts.sort((x, y) => y.cents - x.cents);
 	return { debts, balances };
+}
+
+/**
+ * Saldo einer Person in einem Haushalt (positiv = bekommt noch), frisch vom
+ * Server -- fuer die Warnung beim Austragen eines Gastes, ohne den Store der
+ * Ausgaben-Seite anzufassen.
+ */
+export async function balanceOf(householdId, userId) {
+	const items = await pb.collection(COLLECTION).getFullList({
+		filter: pb.filter('household = {:h}', { h: householdId }),
+		fields: 'id,amount_cents,paid_by,shared_with',
+		requestKey: null
+	});
+	return computeSettlement(items).balances.get(userId) ?? 0;
 }
 
 /* ------------------------------------------------------------------- Format */

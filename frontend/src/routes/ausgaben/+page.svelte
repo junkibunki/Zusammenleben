@@ -38,6 +38,9 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 
 	let users = $state([]);
+	// Wer hier mal Mitglied war und es nicht mehr ist -- nur denen gegenueber
+	// darf man selbst eintragen, dass sie ihre Schuld beglichen haben.
+	let formerIds = $state([]);
 	let usersLoading = $state(true);
 	let usersFailed = $state(false); // getrennt von `error`: die Meldung ist wegklickbar
 	let attempt = $state(0); // erhoeht der "Erneut laden"-Knopf, startet den Effekt neu
@@ -65,9 +68,12 @@
 
 	// Schuldenuebersicht, geoeffnet ueber den eigenen Saldo.
 	let mineOpen = $state(false);
-	let settling = $state([]); // Glaeubiger-IDs, deren Ausgleich gerade gespeichert wird
+	// IDs der Gegenseite (Glaeubiger oder, beim "Erhalten", Schuldner), deren
+	// Ausgleich gerade gespeichert wird. Pro Paar gibt es nur eine Richtung,
+	// die beiden Faelle kommen sich also nicht in die Quere.
+	let settling = $state([]);
 	let settleError = $state(null);
-	// Glaeubiger-ID -> Record-ID des noch nicht bestaetigten Ausgleichs. Kein
+	// Gegenseite -> Record-ID des noch nicht bestaetigten Ausgleichs. Kein
 	// $state: steuert nur, welche ID der naechste Versuch nimmt.
 	const settleIds = new Map();
 
@@ -96,6 +102,7 @@
 				if (cancelled) return;
 				const records = all.filter((u) => u.membership.active);
 				users = records;
+				formerIds = all.filter((u) => !u.membership.active).map((u) => u.id);
 				// Vorauswahl: alle. Nur beim Laden -- ein spaeteres Abwaehlen soll
 				// nicht wieder zurueckspringen.
 				picked = records.map((u) => u.id);
@@ -278,25 +285,33 @@
 		mineOpen = true;
 	}
 
+	// Eigene Schuld begleichen -- oder, bei einem ehemaligen Mitglied, eintragen,
+	// dass es seine Schuld bei mir beglichen hat.
 	async function settle(debt) {
-		if (settling.includes(debt.to)) return;
-		settling.push(debt.to);
+		const other = debt.from === auth.user?.id ? debt.to : debt.from;
+		if (settling.includes(other)) return;
+		settling.push(other);
 		settleError = null;
 		// Die ID ueberlebt einen Fehlschlag: ging nur die Antwort verloren, trifft
 		// der naechste Tipp denselben Eintrag statt einen zweiten Ausgleich.
-		const id = settleIds.get(debt.to) ?? newExpenseId();
-		settleIds.set(debt.to, id);
+		const id = settleIds.get(other) ?? newExpenseId();
+		settleIds.set(other, id);
 		try {
 			// Der Betrag ist der, der gerade dasteht -- genau den hat man angetippt.
-			const { mismatch } = await settleDebt({ ...debt, id, toName: nameOf(debt.to) });
-			settleIds.delete(debt.to);
+			const { mismatch } = await settleDebt({
+				...debt,
+				id,
+				toName: nameOf(debt.to),
+				otherName: nameOf(other)
+			});
+			settleIds.delete(other);
 			// Lag unter der ID schon ein Ausgleich mit anderem Betrag: der zaehlt,
 			// die Uebersicht zeigt, was danach noch offen ist.
 			if (mismatch) settleError = 'Ein früherer Ausgleich war schon gespeichert — bitte den Restbetrag prüfen.';
 		} catch (err) {
 			settleError = err?.userFacing ? err.message : 'Der Ausgleich konnte nicht eingetragen werden.';
 		} finally {
-			const i = settling.indexOf(debt.to);
+			const i = settling.indexOf(other);
 			if (i > -1) settling.splice(i, 1);
 		}
 	}
@@ -862,11 +877,32 @@
 					</p>
 					<ul class="divide-y rounded-lg border">
 						{#each owedToMe as debt (debt.from)}
-							<li class="flex items-center gap-3 px-3 py-3">
-								<span class="min-w-0 flex-1 truncate text-sm">{nameOf(debt.from)}</span>
+							{@const former = formerIds.includes(debt.from)}
+							{@const busy = settling.includes(debt.from)}
+							<li class={['flex items-center gap-3', former ? 'py-2 pr-2 pl-3' : 'px-3 py-3']}>
+								<span class="min-w-0 flex-1 truncate text-sm">
+									{nameOf(debt.from)}
+									{#if former}
+										<span class="text-muted-foreground block text-xs">nicht mehr im Haushalt</span>
+									{/if}
+								</span>
 								<span class="shrink-0 text-sm font-medium tabular-nums">
 									{formatEuro(debt.cents)}
 								</span>
+								<!-- Wer ausgetragen ist, kann selbst nichts mehr eintragen; den
+								     Ausgleich traegt dann der Glaeubiger ein. -->
+								{#if former}
+									<Button
+										size="lg"
+										variant="outline"
+										class="h-11 shrink-0"
+										disabled={busy}
+										aria-label={`${formatEuro(debt.cents)} von ${nameOf(debt.from)} als erhalten eintragen`}
+										onclick={() => settle(debt)}
+									>
+										{busy ? 'Trage ein …' : 'Erhalten'}
+									</Button>
+								{/if}
 							</li>
 						{/each}
 					</ul>

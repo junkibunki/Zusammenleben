@@ -17,6 +17,7 @@
 		untilAsDate
 	} from '$lib/households.svelte.js';
 	import { userLabel, formatDate } from '$lib/items.svelte.js';
+	import { balanceOf, formatEuro } from '$lib/expenses.svelte.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
@@ -174,6 +175,11 @@
 	let saving = $state(false);
 	let editError = $state('');
 	let confirmRemove = $state(false);
+	// Saldo des Gastes in den Ausgaben: null = wird noch geladen, NaN = unbekannt.
+	// Steht beim Austragen als Warnung da -- begleichen geht danach nur noch
+	// als Ausgleich auf der Ausgaben-Seite.
+	let balance = $state(null);
+	let balanceSeq = 0; // nur die Abfrage zum zuletzt geoeffneten Gast zaehlt
 
 	function openEdit(user) {
 		editing = user;
@@ -182,6 +188,16 @@
 		editError = '';
 		confirmRemove = false;
 		editOpen = true;
+
+		const mine = ++balanceSeq;
+		balance = null;
+		balanceOf(editHousehold, user.id)
+			.then((cents) => {
+				if (mine === balanceSeq) balance = cents;
+			})
+			.catch(() => {
+				if (mine === balanceSeq) balance = NaN;
+			});
 	}
 
 	async function saveGuest(event) {
@@ -465,6 +481,19 @@
 					<p class="text-sm">
 						{userLabel(editing)} wirklich austragen? In alten Ausgaben bleibt der Name stehen.
 					</p>
+					{#if balance === null}
+						<p class="text-muted-foreground text-sm">Prüfe offene Beträge …</p>
+					{:else if Number.isNaN(balance)}
+						<p class="text-destructive text-sm">
+							Offene Beträge ließen sich nicht prüfen — sieh vorher unter Ausgaben nach.
+						</p>
+					{:else if balance !== 0}
+						<p class="text-destructive text-sm font-medium">
+							{userLabel(editing)}
+							{balance > 0 ? 'bekommt' : 'schuldet'} in den Ausgaben noch {formatEuro(Math.abs(balance))}.
+							Ausgleichen lässt sich das auch danach noch unter Ausgaben.
+						</p>
+					{/if}
 					<div class="grid grid-cols-2 gap-2">
 						<Button
 							type="button"
