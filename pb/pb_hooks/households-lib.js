@@ -2,6 +2,8 @@
 
 // Gaeste einladen (Seite "Bewohner"): ein Haupt-Mitglied sucht unter *allen*
 // Accounts und traegt eine Person als Gast ein, auf Wunsch mit Enddatum.
+// Spaeter kann es das Enddatum eines laufenden Gastes aendern oder ihn
+// austragen; Haupt-Mitgliedschaften fasst keine dieser Routen an.
 //
 // Eigene Routen statt offener Rules: die ListRule von `users` zeigt nur
 // Mitbewohner (und wer Training eingeschaltet hat). Sie fuer die Suche zu
@@ -33,8 +35,40 @@ function requireMain(app, authId, householdId) {
 		// Keine Zeile -- unten abweisen.
 	}
 	if (!membership || !isActive(membership)) {
-		throw new ForbiddenError('Nur Haupt-Mitglieder können Gäste einladen.');
+		throw new ForbiddenError('Nur Haupt-Mitglieder können Gäste verwalten.');
 	}
+}
+
+/** Feldfehler, den das SDK unter `err.response.data.<field>` liefert. */
+function fail(field, code, message) {
+	throw new BadRequestError(message, { [field]: new ValidationError(code, message) });
+}
+
+/** ISO-Zeitpunkt aus dem Request -> gespeichertes `until`; leer bleibt leer (unbefristet). */
+function parseUntil(until) {
+	if (!until) return '';
+	const t = new Date(until).getTime();
+	if (Number.isNaN(t)) fail('until', 'guest_until_invalid', 'Das Enddatum ist ungültig.');
+	if (t <= Date.now()) fail('until', 'guest_until_past', 'Das Enddatum muss in der Zukunft liegen.');
+	return new Date(t).toISOString();
+}
+
+/** Die laufende Gastmitgliedschaft von `userId` im Haushalt; sonst 404. */
+function findActiveGuest(app, householdId, userId) {
+	let membership = null;
+	try {
+		membership = app.findFirstRecordByFilter(
+			'memberships',
+			'user = {:u} && household = {:h} && role = "gast"',
+			{ u: userId, h: householdId }
+		);
+	} catch {
+		// Keine Zeile -- unten abweisen.
+	}
+	if (!membership || !isActive(membership)) {
+		throw new NotFoundError('Die Person ist hier nicht (mehr) zu Gast.');
+	}
+	return membership;
 }
 
 /** Was die Seite von einem Account zu sehen bekommt -- genug fuer `avatarUrl()`. */
@@ -87,10 +121,6 @@ function searchGuests(app, authId, householdId, query) {
 function inviteGuest(app, authId, householdId, userId, until) {
 	requireMain(app, authId, householdId);
 
-	const fail = (field, code, message) => {
-		throw new BadRequestError(message, { [field]: new ValidationError(code, message) });
-	};
-
 	let user = null;
 	try {
 		user = app.findRecordById('users', userId);
@@ -98,13 +128,7 @@ function inviteGuest(app, authId, householdId, userId, until) {
 		fail('user', 'guest_unknown_user', 'Diesen Account gibt es nicht.');
 	}
 
-	let end = '';
-	if (until) {
-		const t = new Date(until).getTime();
-		if (Number.isNaN(t)) fail('until', 'guest_until_invalid', 'Das Enddatum ist ungültig.');
-		if (t <= Date.now()) fail('until', 'guest_until_past', 'Das Enddatum muss in der Zukunft liegen.');
-		end = new Date(t).toISOString();
-	}
+	const end = parseUntil(until);
 
 	let membership = null;
 	try {
@@ -153,4 +177,25 @@ function inviteGuest(app, authId, householdId, userId, until) {
 	};
 }
 
-module.exports = { searchGuests, inviteGuest };
+/** Neues Enddatum fuer einen laufenden Gast; leer heisst unbefristet. */
+function updateGuest(app, authId, householdId, userId, until) {
+	requireMain(app, authId, householdId);
+	const membership = findActiveGuest(app, householdId, userId);
+	membership.set('until', parseUntil(until));
+	app.save(membership);
+	return { role: 'gast', until: membership.getString('until'), active: true };
+}
+
+/**
+ * Gast austragen. Die Zeile bleibt stehen und laeuft nur ab -- wie jede
+ * abgelaufene Mitgliedschaft haelt sie den Namen in alten Ausgaben lesbar
+ * (Migration 1789304400). Wieder einladen belebt sie neu.
+ */
+function removeGuest(app, authId, householdId, userId) {
+	requireMain(app, authId, householdId);
+	const membership = findActiveGuest(app, householdId, userId);
+	membership.set('until', new Date().toISOString());
+	app.save(membership);
+}
+
+module.exports = { searchGuests, inviteGuest, updateGuest, removeGuest };

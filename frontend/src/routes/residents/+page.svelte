@@ -4,13 +4,17 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
 	import {
 		households,
 		activeHousehold,
 		listMembers,
 		searchGuestCandidates,
-		inviteGuest
+		inviteGuest,
+		updateGuest,
+		removeGuest,
+		untilAsDate
 	} from '$lib/households.svelte.js';
 	import { userLabel, formatDate } from '$lib/items.svelte.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
@@ -160,6 +164,87 @@
 		}
 		inviting = false;
 	}
+
+	// Gast bearbeiten: Enddatum aendern oder austragen, ebenfalls nur fuer
+	// Haupt-Mitglieder. Austragen laesst die Mitgliedschaft nur ablaufen.
+	let editOpen = $state(false);
+	let editing = $state(null); // der User-Record aus `users`
+	let editHousehold = ''; // Haushalt beim Oeffnen -- ein Wechsel danach trifft nicht den falschen
+	let editUntil = $state('');
+	let saving = $state(false);
+	let editError = $state('');
+	let confirmRemove = $state(false);
+
+	function openEdit(user) {
+		editing = user;
+		editHousehold = households.activeId;
+		editUntil = untilAsDate(user.membership.until);
+		editError = '';
+		confirmRemove = false;
+		editOpen = true;
+	}
+
+	async function saveGuest(event) {
+		event.preventDefault();
+		if (!editing || saving) return;
+		const householdId = editHousehold;
+		const userId = editing.id;
+		saving = true;
+		editError = '';
+		try {
+			const membership = await updateGuest(householdId, userId, editUntil);
+			if (households.activeId === householdId) {
+				const user = users.find((u) => u.id === userId);
+				if (user) user.membership = membership;
+			}
+			editOpen = false;
+		} catch (err) {
+			if (!dropStale(err, householdId, userId)) {
+				editError = guestError(err, 'Speichern hat nicht geklappt.');
+			}
+		}
+		saving = false;
+	}
+
+	// 404: der Gast ist inzwischen abgelaufen oder ausgetragen -- dann gehoert
+	// er auch hier nicht mehr in die Liste.
+	function dropStale(err, householdId, userId) {
+		if (err?.status !== 404) return false;
+		if (households.activeId === householdId) {
+			const i = users.findIndex((u) => u.id === userId);
+			if (i !== -1) users.splice(i, 1);
+		}
+		editOpen = false;
+		return true;
+	}
+
+	async function dropGuest() {
+		if (!editing || saving) return;
+		const householdId = editHousehold;
+		const userId = editing.id;
+		saving = true;
+		editError = '';
+		try {
+			await removeGuest(householdId, userId);
+			if (households.activeId === householdId) {
+				const i = users.findIndex((u) => u.id === userId);
+				if (i !== -1) users.splice(i, 1);
+			}
+			editOpen = false;
+		} catch (err) {
+			// Schon weg ist beim Austragen das gewuenschte Ergebnis.
+			if (!dropStale(err, householdId, userId)) {
+				editError = guestError(err, 'Austragen hat nicht geklappt.');
+			}
+		}
+		saving = false;
+	}
+
+	function guestError(err, fallback) {
+		if (err?.response?.data?.until?.message) return err.response.data.until.message;
+		if (err?.status === 403) return 'Nur Haupt-Mitglieder können Gäste verwalten.';
+		return fallback;
+	}
 </script>
 
 {#if error}
@@ -232,6 +317,17 @@
 							{/if}
 						</span>
 					</div>
+					{#if household?.role === 'haupt' && user.membership.role === 'gast'}
+						<Button
+							variant="ghost"
+							size="icon"
+							class="text-muted-foreground size-11 shrink-0"
+							aria-label={`${label} bearbeiten`}
+							onclick={() => openEdit(user)}
+						>
+							<PencilIcon class="size-4" />
+						</Button>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -251,7 +347,7 @@
 			<Sheet.Title>Gast einladen</Sheet.Title>
 			<Sheet.Description>
 				Gäste nutzen Zettel, Ausgaben und Wünsche von {household?.name ?? 'diesem Haushalt'} mit.
-				Ohne Enddatum bleiben sie, bis jemand sie im Admin-Bereich austrägt.
+				Ohne Enddatum bleiben sie, bis ihr sie hier wieder austragt.
 			</Sheet.Description>
 		</Sheet.Header>
 		<form class="flex flex-col gap-4 px-4 pb-4" onsubmit={invite}>
@@ -322,6 +418,79 @@
 					Person auswählen
 				{/if}
 			</Button>
+		</form>
+	</Sheet.Content>
+</Sheet.Root>
+
+<Sheet.Root bind:open={editOpen}>
+	<Sheet.Content side="bottom" class="safe-b max-h-[85dvh] gap-0 overflow-y-auto">
+		<Sheet.Header class="p-4 pr-12">
+			<Sheet.Title>{userLabel(editing)} – Gast</Sheet.Title>
+			<Sheet.Description>
+				Bis wann {userLabel(editing)} zu {household?.name ?? 'diesem Haushalt'} gehört.
+			</Sheet.Description>
+		</Sheet.Header>
+		<form class="flex flex-col gap-4 px-4 pb-4" onsubmit={saveGuest}>
+			<div class="grid gap-1.5">
+				<Label for="guest-edit-until">Enddatum</Label>
+				<div class="flex gap-2">
+					<Input
+						id="guest-edit-until"
+						type="date"
+						min={today()}
+						bind:value={editUntil}
+						class="h-11 min-w-0 flex-1"
+					/>
+					{#if editUntil}
+						<Button type="button" variant="ghost" class="h-11 shrink-0" onclick={() => (editUntil = '')}>
+							Ohne Enddatum
+						</Button>
+					{/if}
+				</div>
+				{#if !editUntil}
+					<p class="text-muted-foreground text-xs">Unbefristet – bis ihr den Gast austragt.</p>
+				{/if}
+			</div>
+
+			{#if editError}
+				<p class="text-destructive text-sm">{editError}</p>
+			{/if}
+
+			<Button type="submit" size="lg" class="h-11" disabled={saving}>
+				{saving && !confirmRemove ? 'Speichere …' : 'Speichern'}
+			</Button>
+
+			{#if confirmRemove}
+				<div class="bg-muted flex flex-col gap-3 rounded-lg p-3">
+					<p class="text-sm">
+						{userLabel(editing)} wirklich austragen? In alten Ausgaben bleibt der Name stehen.
+					</p>
+					<div class="grid grid-cols-2 gap-2">
+						<Button
+							type="button"
+							variant="ghost"
+							class="h-11"
+							disabled={saving}
+							onclick={() => (confirmRemove = false)}
+						>
+							Abbrechen
+						</Button>
+						<Button type="button" variant="destructive" class="h-11" disabled={saving} onclick={dropGuest}>
+							{saving ? 'Trage aus …' : 'Austragen'}
+						</Button>
+					</div>
+				</div>
+			{:else}
+				<Button
+					type="button"
+					variant="ghost"
+					class="text-destructive h-11"
+					disabled={saving}
+					onclick={() => (confirmRemove = true)}
+				>
+					Aus dem Haushalt austragen
+				</Button>
+			{/if}
 		</form>
 	</Sheet.Content>
 </Sheet.Root>

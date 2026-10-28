@@ -181,12 +181,45 @@ export async function searchGuestCandidates(householdId, query) {
  * von `listMembers()`.
  */
 export async function inviteGuest(householdId, userId, untilDate) {
-	const until = untilDate ? new Date(`${untilDate}T23:59:59`).toISOString() : '';
+	const until = endOfDay(untilDate);
 	const { user, membership } = await pb.send(
 		`/api/households/${encodeURIComponent(householdId)}/guests`,
 		{ method: 'POST', body: { user: userId, until }, requestKey: null }
 	);
 	return { ...user, membership };
+}
+
+/** "YYYY-MM-DD" -> ISO-Zeitpunkt 23:59:59 Ortszeit; leer bleibt leer. */
+function endOfDay(date) {
+	return date ? new Date(`${date}T23:59:59`).toISOString() : '';
+}
+
+/** `until` einer Mitgliedschaft als "YYYY-MM-DD" in Ortszeit, fuer `<input type="date">`. */
+export function untilAsDate(until) {
+	if (!until) return '';
+	const d = new Date(String(until).replace(' ', 'T'));
+	if (Number.isNaN(d.getTime())) return '';
+	const pad = (n) => String(n).padStart(2, '0');
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Neues Enddatum fuer einen laufenden Gast (leer = unbefristet), wie bei
+ * `inviteGuest` bis einschliesslich dieses Tages. Liefert die `membership`.
+ */
+export async function updateGuest(householdId, userId, untilDate) {
+	return pb.send(
+		`/api/households/${encodeURIComponent(householdId)}/guests/${encodeURIComponent(userId)}`,
+		{ method: 'PATCH', body: { until: endOfDay(untilDate) }, requestKey: null }
+	);
+}
+
+/** Gast austragen: seine Mitgliedschaft laeuft sofort ab. */
+export async function removeGuest(householdId, userId) {
+	await pb.send(
+		`/api/households/${encodeURIComponent(householdId)}/guests/${encodeURIComponent(userId)}`,
+		{ method: 'DELETE', requestKey: null }
+	);
 }
 
 /**

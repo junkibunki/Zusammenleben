@@ -109,3 +109,39 @@ routerAdd(
 	},
 	$apis.requireAuth('users')
 );
+
+// Enddatum eines Gastes aendern (leer = unbefristet) ...
+routerAdd(
+	'PATCH',
+	'/api/households/{id}/guests/{user}',
+	(e) => {
+		const body = e.requestInfo().body || {};
+		return e.json(
+			200,
+			require(`${__hooks}/households-lib.js`).updateGuest(
+				e.app,
+				e.auth.id,
+				e.request.pathValue('id'),
+				e.request.pathValue('user'),
+				String(body.until || '')
+			)
+		);
+	},
+	$apis.requireAuth('users')
+);
+
+// ... oder ihn austragen.
+routerAdd(
+	'DELETE',
+	'/api/households/{id}/guests/{user}',
+	(e) => {
+		require(`${__hooks}/households-lib.js`).removeGuest(
+			e.app,
+			e.auth.id,
+			e.request.pathValue('id'),
+			e.request.pathValue('user')
+		);
+		return e.noContent(204);
+	},
+	$apis.requireAuth('users')
+);

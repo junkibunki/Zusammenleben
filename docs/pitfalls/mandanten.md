@@ -8,7 +8,7 @@ Collection anlegst, die pro Haushalt getrennt sein soll.
 `households` (`name`, `car_name` = Name des Autos) und `memberships` (`user`, `household`, `role` = `haupt`|`gast`,
 `until`). Gepflegt im Admin-UI, alle Schreib-Rules `null` — Ausnahme: `car_name` ändern
 Haupt-Mitglieder selbst (`households.updateRule`, Migration `1789477200`), und sie laden
-Gäste über eigene Routen ein (`pb_hooks/households-lib.js`, die Rules bleiben `null`). „Höchstens ein Haupthaushalt"
+Gäste über eigene Routen ein, ändern deren Enddatum oder tragen sie aus (`pb_hooks/households-lib.js`, die Rules bleiben `null`). „Höchstens ein Haupthaushalt"
 ist der partielle Unique-Index `idx_memberships_main … WHERE role = 'haupt'`, kein Hook.
 Laufend ist eine Mitgliedschaft mit leerem oder künftigem `until`; abgelaufene Zeilen
 bleiben stehen und öffnen nichts mehr.
