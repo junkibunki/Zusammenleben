@@ -40,6 +40,8 @@
 						? 'Training'
 						: page.url.pathname === '/training/einstellungen'
 							? 'Training einrichten'
+							: page.url.pathname === '/training/vorlagen'
+								? 'Trainings von anderen'
 							: page.url.pathname === '/training/koerpergewicht'
 								? 'Körpergewicht'
 								: page.url.pathname.startsWith('/training/uebung/')

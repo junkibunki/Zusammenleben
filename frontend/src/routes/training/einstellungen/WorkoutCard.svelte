@@ -16,18 +16,20 @@
 		updateExercise,
 		deleteExercise,
 		moveExercise,
+		setWorkoutShared,
 		trainingError,
 		kindOf,
 		targetLabel,
 		parseWeight,
-		formatWeight,
 		KINDS,
 		DEFAULT_REST,
 		DEFAULT_INCREMENT,
 		EXERCISE_MAX,
 		WORKOUT_MAX
 	} from '$lib/training.svelte.js';
+	import { auth } from '$lib/pocketbase.svelte.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -81,6 +83,22 @@
 			error = trainingError(err, 'Verschieben fehlgeschlagen');
 		} finally {
 			moving = false;
+		}
+	}
+
+	// --- Freigabe ----------------------------------------------------------
+
+	let sharing = $state(false);
+
+	async function toggleShared(shared) {
+		sharing = true;
+		error = null;
+		try {
+			await setWorkoutShared(workout, shared);
+		} catch (err) {
+			error = trainingError(err, 'Freigeben fehlgeschlagen');
+		} finally {
+			sharing = false;
 		}
 	}
 
@@ -160,12 +178,12 @@
 		return { fields };
 	}
 
-	/** Zusammenfassung der Felder hinter "Mehr", z.B. "Pause 90 s · +2,5 kg". */
+	/**
+	 * Zusammenfassung hinter "Mehr", z.B. "Pause 90 s". Die Steigerung bleibt
+	 * draussen -- beim Eintragen sieht man sie auch nur als Vorschlag.
+	 */
 	function moreSummary(d) {
-		const rest = isInt(d.rest, 1, 900) ? `Pause ${d.rest} s` : 'Kein Pausen-Timer';
-		if (kindOf(d) !== 'weight') return rest;
-		const inc = parseWeight(d.increment);
-		return `${rest} · ${inc ? `+${formatWeight(inc)}` : 'keine Steigerung'}`;
+		return isInt(d.rest, 1, 900) ? `Pause ${d.rest} s` : 'Kein Pausen-Timer';
 	}
 
 	const kindLabel = (kind) => KINDS.find((k) => k.id === kind)?.label ?? kind;
@@ -386,6 +404,26 @@
 			/>
 			{@render exerciseFields(newDraft, `new-${workout.id}`, newCheck, addActions)}
 		</form>
+
+		<div class="flex flex-col gap-1">
+			<div class="flex min-h-11 items-center gap-3">
+				<Checkbox
+					id="share-{workout.id}"
+					bind:checked={() => !!workout.shared, (v) => toggleShared(v)}
+					disabled={sharing}
+				/>
+				<Label for="share-{workout.id}" class="flex-1 py-3">Für andere freigeben</Label>
+			</div>
+			<p class="text-muted-foreground text-sm">
+				{#if workout.shared && !auth.user?.show_training}
+					Gerade für niemanden sichtbar: Freigaben gelten nur, solange „Training anzeigen“ im
+					<a href="/profile" class="underline underline-offset-4">Profil</a> eingeschaltet ist.
+				{:else}
+					Alle in der App können die Übungen dieses Trainings sehen und in ihren Plan kopieren –
+					deine eingetragenen Gewichte nicht.
+				{/if}
+			</p>
+		</div>
 	</Card.Content>
 
 	{#if !renaming}

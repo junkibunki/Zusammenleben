@@ -137,8 +137,9 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │                                  # (Saetze eintragen, Entry*; kalender/, feed/,
 │                                  # koerpergewicht/, uebung/[id]/ = Verlauf;
 │                                  # einstellungen/ = Trainings, Uebungen, Tage,
-│                                  # Export; privat, im Menue nur mit
-│                                  # users.show_training), residents/,
+│                                  # Export, Freigabe; vorlagen/ = freigegebene
+│                                  # Trainings anderer kopieren; privat, im Menue
+│                                  # nur mit users.show_training), residents/,
 │                                  # login/
 ├── pb/
 │   ├── pocketbase(.exe)           # gitignored, v0.23+ noetig (getestet: 0.40.2)
@@ -149,7 +150,8 @@ damit sie nur Kontext kosten, wenn sie gebraucht werden.
 │   │                              # + training-lib.js (Saetze pruefen, Cron-
 │   │                              # Erinnerung, Feed-Beitrag, Push an Follower,
 │   │                              # Satzpause-Push per sleep-Prozess),
-│   │                              # together.pb.js
+│   │                              # training-share.pb.js (Kopier-Route fuer
+│   │                              # freigegebene Trainings), together.pb.js
 │   │                              # (Schreibrechte + Push), webpush.js
 │   │                              # GENERIERT
 │   ├── pb_data/                   # gitignored, die SQLite-DB

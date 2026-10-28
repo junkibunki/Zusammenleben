@@ -3,6 +3,7 @@
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import BellIcon from '@lucide/svelte/icons/bell';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import CopyIcon from '@lucide/svelte/icons/copy';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { auth } from '$lib/pocketbase.svelte.js';
@@ -197,6 +198,10 @@
 						<Alert.Description>{addError}</Alert.Description>
 					</Alert.Root>
 				{/if}
+				<Button variant="outline" size="lg" class="h-11 w-full" href="/training/vorlagen">
+					<CopyIcon class="size-4" />
+					Training von anderen übernehmen
+				</Button>
 			</Card.Content>
 		</Card.Root>
 	{/if}

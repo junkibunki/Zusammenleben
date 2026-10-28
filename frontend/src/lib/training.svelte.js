@@ -248,6 +248,55 @@ export function moveWorkout(workout, delta) {
 	return move('training_workouts', orderedWorkouts(), workout, delta);
 }
 
+// --- Freigabe (Migration 1790686800) ----------------------------------------
+
+/** Training fuer andere freigeben oder die Freigabe zuruecknehmen. */
+export async function setWorkoutShared(workout, shared) {
+	const record = await pb.collection('training_workouts').update(workout.id, { shared });
+	const idx = training.workouts.findIndex((w) => w.id === workout.id);
+	if (idx > -1) training.workouts[idx] = record;
+}
+
+/**
+ * Die freigegebenen Trainings der anderen (unsortiert), jedes mit `exercises`
+ * in ihrer Reihenfolge und der Person in `expand.user`. Die eigenen fehlen bewusst.
+ */
+export async function loadSharedWorkouts() {
+	const u = me().id;
+	const [workouts, exercises] = await Promise.all([
+		pb.collection('training_workouts').getFullList({
+			filter: pb.filter('shared = true && user != {:u}', { u }),
+			expand: 'user',
+			requestKey: null
+		}),
+		pb.collection('training_exercises').getFullList({
+			filter: pb.filter('workout.shared = true && user != {:u}', { u }),
+			requestKey: null
+		})
+	]);
+	return workouts.map((w) => ({
+		...w,
+		exercises: exercises.filter((e) => e.workout === w.id).sort(bySort)
+	}));
+}
+
+/**
+ * Ein freigegebenes Training in den eigenen Plan kopieren (Route in
+ * pb_hooks/training-share.pb.js). Liefert das neue Training; heisst es schon
+ * so, traegt es eine Nummer ("Push 2").
+ */
+export async function copyWorkout(workoutId) {
+	const { workout, exercises } = await pb.send(
+		`/api/training/workouts/${encodeURIComponent(workoutId)}/copy`,
+		{ method: 'POST', requestKey: null }
+	);
+	if (!training.workouts.some((w) => w.id === workout.id)) training.workouts.push(workout);
+	for (const ex of exercises) {
+		if (!training.exercises.some((e) => e.id === ex.id)) training.exercises.push(ex);
+	}
+	return workout;
+}
+
 // --- Uebungen ---------------------------------------------------------------
 
 /**
