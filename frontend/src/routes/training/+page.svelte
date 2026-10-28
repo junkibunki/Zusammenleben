@@ -17,6 +17,7 @@
 		suggestedWorkout,
 		saveDay,
 		logFor,
+		previousLog,
 		kindOf,
 		sessionFor,
 		saveSession,
@@ -169,7 +170,7 @@
 						continue;
 					}
 				}
-				merged[id] = draftFrom(ex, logFor(id, date), kindOf(ex));
+				merged[id] = draftFrom(ex, logFor(id, date), kindOf(ex), previousLog(id, date));
 			}
 			previous = seen;
 			draftsFor = key;

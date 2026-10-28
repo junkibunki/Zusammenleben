@@ -4,7 +4,6 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import MinusIcon from '@lucide/svelte/icons/minus';
-	import RepeatIcon from '@lucide/svelte/icons/repeat';
 	import StickyNoteIcon from '@lucide/svelte/icons/sticky-note';
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import {
@@ -29,7 +28,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { parseKg, parseReps, parseSeconds, toText, emptyRow, rowFromSet } from './EntryDraft.js';
+	import { parseKg, parseReps, parseSeconds, toText, emptyRow } from './EntryDraft.js';
 
 	// Eine Uebung auf der Eintragsseite. `draft` gehoert der Seite (gebunden),
 	// `onchange` meldet jede Aenderung, damit die Seite den Entwurf sichert.
@@ -117,13 +116,6 @@
 		if (!timer.watch && date === today() && !sessionFor(date)) startWatch(date, exercise.workout);
 	}
 
-	function sameAsLast() {
-		const sets = setsOf(prev).slice(0, SETS_MAX);
-		if (sets.length === 0) return;
-		draft.rows = sets.map((s) => rowFromSet(s, kind));
-		changed();
-	}
-
 	/** Alle Arbeitsgewichte um eine Steigerung rauf oder runter. */
 	function shift(dir) {
 		draft.rows.forEach((r, i) => {
@@ -183,23 +175,13 @@
 		{/if}
 	</div>
 
-	<div class="flex items-center justify-between gap-2">
-		<p class="text-muted-foreground min-w-0 text-sm">
-			{#if prev}
-				Letztes Mal:
-				<span class="text-foreground font-semibold tabular-nums">{formatSets(exercise, prev)}</span>
-				<span class="text-xs">· {formatDate(prev.date)}</span>
-			{:else}
-				<span class="text-xs">Noch nichts eingetragen</span>
-			{/if}
-		</p>
+	<p class="text-muted-foreground text-xs">
 		{#if prev}
-			<Button variant="outline" class="h-11 shrink-0" onclick={sameAsLast}>
-				<RepeatIcon />
-				Wie letztes Mal
-			</Button>
+			Grau: letztes Mal · {formatDate(prev.date)} – Haken übernimmt
+		{:else}
+			Noch nichts eingetragen
 		{/if}
-	</div>
+	</p>
 
 	{#if todayText}
 		<p class="text-muted-foreground text-sm">

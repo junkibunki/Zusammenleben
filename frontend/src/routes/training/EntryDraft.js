@@ -78,14 +78,21 @@ export function parseRows(kind, rows) {
 	return { sets, bad };
 }
 
-/** Entwurf aus dem gespeicherten Eintrag, ohne Eintrag `exercise.sets` leere Zeilen. */
-export function draftFrom(exercise, log, kind) {
+/**
+ * Entwurf aus dem gespeicherten Eintrag. Ohne Eintrag leere Zeilen: so viele
+ * (samt Aufwaermsaetzen) wie beim letzten Mal `prev`, sonst `exercise.sets` --
+ * die Werte von damals stehen als Platzhalter drin, der Haken uebernimmt sie.
+ */
+export function draftFrom(exercise, log, kind, prev = null) {
 	const sets = log ? setsOf(log) : [];
+	const last = prev ? setsOf(prev) : [];
 	const count = Math.min(SETS_MAX, Math.max(1, exercise.sets || 1));
 	const rows =
 		sets.length > 0
 			? sets.slice(0, SETS_MAX).map((s) => rowFromSet(s, kind))
-			: Array.from({ length: count }, () => emptyRow());
+			: last.length > 0
+				? last.slice(0, SETS_MAX).map((s) => emptyRow(!!s.warmup))
+				: Array.from({ length: count }, () => emptyRow());
 	return { rows, note: log?.note ?? '', fresh: false };
 }
 
