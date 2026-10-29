@@ -7,8 +7,8 @@
 // 1789045200) -- er kann also weder pruefen, ob er etwas schon gewuenscht hat,
 // noch waere ihm zu glauben, wenn er es behauptet.
 //
-// Wer der Wuenschende ist, entscheidet dagegen die CreateRule
-// (`wisher = @request.auth.id`) und *nicht* dieser Hook: die Rule laeuft vor
+// Wer der Wuenschende und wer der Autor ist, entscheidet dagegen die CreateRule
+// (Migration 1790773200) und *nicht* dieser Hook: die Rule laeuft vor
 // dem Hook, ein `e.record.set('wisher', …)` hier kaeme also zu spaet
 // (docs/pitfalls/pocketbase-hooks.md).
 //
@@ -40,31 +40,50 @@ onRecordCreateRequest((e) => {
 	// mit (Migration 1789131600), nur Leerraum an den Enden muss weg.
 	e.record.set('note', e.record.getString('note').trim());
 
-	// Steht dank CreateRule schon auf dem eigenen Account -- ausser das
-	// Admin-UI traegt fuer jemand anderen ein, dann eben auf dessen.
+	// `wisher` ist, fuer wen der Wunsch ist; `author`, wer ihn notiert hat
+	// (Migration 1790773200). Beides prueft die CreateRule. Nur das Admin-UI
+	// darf `author` leer lassen -- dann war es ein eigener Wunsch.
 	const wisher = e.record.getString('wisher');
-	// Doppelt ist ein Wunsch nur im selben Haushalt -- der Unique-Index geht
-	// ueber (`household`, `wisher`, `text_norm`), Migration 1789304400.
+	let author = e.record.getString('author');
+	if (!author) {
+		author = wisher;
+		e.record.set('author', wisher);
+	}
+	const own = author === wisher;
+
+	// Doppelt ist ein Wunsch nur im selben Haushalt. Ein eigener Wunsch wird nur
+	// mit den eigenen verglichen: ein Treffer unter den Ideen anderer verriete,
+	// dass jemand eine hat. Eine Idee fuer X dagegen mit allem bei X -- das
+	// sieht ihr Autor ohnehin. Der Unique-Index (`household`, `wisher`,
+	// `author`, `text_norm`) haelt nur den ersten Fall gegen Gleichzeitigkeit.
 	const household = e.record.getString('household');
 	if (wisher && norm) {
 		let existing = null;
 		try {
-			existing = e.app.findFirstRecordByFilter(
-				'wishes',
-				'household = {:household} && wisher = {:wisher} && text_norm = {:norm}',
-				{ household: household, wisher: wisher, norm: norm }
-			);
+			existing = own
+				? e.app.findFirstRecordByFilter(
+						'wishes',
+						'household = {:household} && wisher = {:wisher} && author = {:wisher} && text_norm = {:norm}',
+						{ household: household, wisher: wisher, norm: norm }
+					)
+				: e.app.findFirstRecordByFilter(
+						'wishes',
+						'household = {:household} && wisher = {:wisher} && text_norm = {:norm}',
+						{ household: household, wisher: wisher, norm: norm }
+					);
 		} catch (err) {
 			// findFirstRecordByFilter wirft ("sql: no rows in result set"), statt
 			// null zu liefern -- kein Treffer ist hier der Normalfall.
 		}
 
 		if (existing) {
-			// Den vorhandenen Wortlaut mitgeben: er stammt von derselben Person,
-			// verraet also nichts, und ohne ihn bliebe die Meldung ein Raetsel --
-			// die Liste ist fuer sie ja unsichtbar.
+			// Den vorhandenen Wortlaut mitgeben: beim eigenen Wunsch stammt er von
+			// derselben Person, bei einer Idee steht er sichtbar in der Liste --
+			// er verraet also nichts, und ohne ihn bliebe die Meldung ein Raetsel.
 			const message =
-				'Das steht schon auf deiner Liste: „' + existing.getString('text') + '“';
+				(own ? 'Das steht schon auf deiner Liste: „' : 'Das steht schon auf der Liste: „') +
+				existing.getString('text') +
+				'“';
 
 			// Der Feldfehler *muss* ein `ValidationError` sein. Ein einfaches
 			// `{ code, message }` haelt PocketBase fuer eine verschachtelte Map und
@@ -96,11 +115,14 @@ routerAdd(
 		// Den Haushalt nennt der Client (`?household=`). Eine Mitgliedschaft muss
 		// hier nicht geprueft werden: gezaehlt werden nur eigene Wuensche, und
 		// die liegen ohnehin nur dort, wo man Mitglied war.
+		//
+		// `author` muss mit: Ideen, die andere fuer mich notiert haben, stehen
+		// ebenfalls auf `wisher = ich` -- mitgezaehlt verriete die Zahl sie.
 		const household = e.request.url.query().get('household');
 		if (!household) throw new BadRequestError('household fehlt');
 		const count = e.app.countRecords(
 			'wishes',
-			$dbx.hashExp({ wisher: e.auth.id, household: household })
+			$dbx.hashExp({ wisher: e.auth.id, author: e.auth.id, household: household })
 		);
 		return e.json(200, { count: count });
 	},

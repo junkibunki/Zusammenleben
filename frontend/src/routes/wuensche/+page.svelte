@@ -2,7 +2,7 @@
 	import GiftIcon from '@lucide/svelte/icons/gift';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { auth, avatarUrl } from '$lib/pocketbase.svelte.js';
-	import { households } from '$lib/households.svelte.js';
+	import { households, listMembers } from '$lib/households.svelte.js';
 	import { userLabel, formatWhen } from '$lib/items.svelte.js';
 	import {
 		wishes,
@@ -17,6 +17,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 
 	let draft = $state('');
@@ -37,7 +38,60 @@
 		return syncWishes(household);
 	});
 
-	const valid = $derived(draft.trim().length > 0 && draft.length <= WISH_MAX);
+	// Laufende Mitglieder des Haushalts -- fuer wen ein Wunsch notiert werden kann.
+	let members = $state([]);
+	// Bis die Liste da ist, steht die Auswahl auf "Für mich" und springt danach
+	// um -- wer vorher abschickt, traefe die falsche Person. Daher wartet der Knopf.
+	let membersReady = $state(false);
+	$effect(() => {
+		const household = households.activeId;
+		members = [];
+		membersReady = false;
+		if (!auth.valid || !household) return;
+		let cancelled = false;
+		listMembers(household)
+			.then((list) => {
+				if (!cancelled) members = list.filter((m) => m.membership.active);
+			})
+			.catch(() => {
+				// Ohne Mitgliederliste bleibt nur der eigene Wunsch -- wie vorher.
+			})
+			.finally(() => {
+				if (!cancelled) membersReady = true;
+			});
+		return () => (cancelled = true);
+	});
+
+	const me = $derived(auth.user?.id ?? '');
+
+	// Die anderen nach Name; Haupt-Mitglieder zuerst, damit die Vorauswahl
+	// (ein anderes Haupt-Mitglied) auch die erste Zeile der Auswahl ist.
+	const others = $derived(
+		members
+			.filter((m) => m.id !== me)
+			.sort(
+				(a, b) =>
+					(a.membership.role === 'haupt' ? 0 : 1) - (b.membership.role === 'haupt' ? 0 : 1) ||
+					userLabel(a).localeCompare(userLabel(b), 'de')
+			)
+	);
+
+	// Gewaehlt wird nur ueber `chosen`; leer oder nicht mehr im Haushalt heisst
+	// Vorauswahl. bits-ui setzt beim erneuten Antippen des gewaehlten Eintrags
+	// "" (docs/pitfalls/designsystem.md) -- das ignoriert der Setter unten.
+	// Vorausgewaehlt ist nur ein anderes *Haupt*-Mitglied; gibt es keins, der
+	// eigene Wunsch -- ein Gast waere als Vorauswahl ein Zufall.
+	let chosen = $state('');
+	const target = $derived(
+		chosen === me || others.some((m) => m.id === chosen)
+			? chosen
+			: (others.find((m) => m.membership.role === 'haupt')?.id ?? me)
+	);
+	const targetUser = $derived(others.find((m) => m.id === target) ?? null);
+	const forMe = $derived(!targetUser);
+	const targetName = $derived(userLabel(targetUser) || 'Jemand');
+
+	const valid = $derived(membersReady && draft.trim().length > 0 && draft.length <= WISH_MAX);
 
 	/**
 	 * Ein Block pro Person. Nach Name sortiert, nicht nach Zeit: die Frage auf
@@ -65,18 +119,24 @@
 		if (!valid || posting) return;
 
 		const text = draft;
+		// Festhalten: die Bestaetigung soll die Person nennen, fuer die es war,
+		// auch wenn die Auswahl inzwischen wechselt.
+		const own = forMe;
+		const name = targetName;
 		posting = true;
 		formError = '';
 		posted = '';
 		try {
-			await addWish(text, noteDraft);
+			await addWish(text, noteDraft, target);
 			draft = '';
 			noteDraft = '';
-			posted = text.trim();
+			posted = own
+				? `„${text.trim()}“ ist notiert und für dich ab jetzt unsichtbar.`
+				: `„${text.trim()}“ steht jetzt bei ${name} — ${name} sieht es nicht.`;
 		} catch (err) {
 			// Den Entwurf stehen lassen: bei einem Doppelten will die Person ihn
 			// umformulieren, nicht neu tippen.
-			formError = wishErrorMessage(err) ?? err?.message ?? 'Wünschen fehlgeschlagen';
+			formError = wishErrorMessage(err, own) ?? err?.message ?? 'Wünschen fehlgeschlagen';
 		} finally {
 			posting = false;
 		}
@@ -84,15 +144,42 @@
 </script>
 
 <form class="bg-background border-b px-3 py-2.5" onsubmit={submit}>
+	{#if others.length > 0}
+		<!-- Ohne andere Mitglieder (oder solange sie laden) gibt es nur den eigenen
+		     Wunsch -- dann braucht es keine Auswahl. -->
+		<Select.Root
+			type="single"
+			bind:value={
+				() => target,
+				(v) => {
+					if (!v) return;
+					chosen = v;
+					formError = '';
+					posted = '';
+				}
+			}
+		>
+			<Select.Trigger class="mb-2 h-11 w-full data-[size=default]:h-11" aria-label="Für wen?">
+				{forMe ? 'Für mich' : `Idee für ${targetName}`}
+			</Select.Trigger>
+			<Select.Content>
+				{#each others as user (user.id)}
+					{@const label = `Idee für ${userLabel(user)}`}
+					<Select.Item value={user.id} {label}>{label}</Select.Item>
+				{/each}
+				<Select.Item value={me} label="Für mich">Für mich</Select.Item>
+			</Select.Content>
+		</Select.Root>
+	{/if}
 	<div class="flex items-start gap-2">
 		<Input
 			bind:value={draft}
 			maxlength={WISH_MAX}
 			autocomplete="off"
-			aria-label="Dein Wunsch"
+			aria-label={forMe ? 'Dein Wunsch' : `Idee für ${targetName}`}
 			aria-invalid={formError ? 'true' : undefined}
 			aria-describedby="wunsch-hinweis"
-			placeholder="Was wünschst du dir?"
+			placeholder={forMe ? 'Was wünschst du dir?' : `Was könnte ${targetName} gefallen?`}
 			class="h-11"
 			oninput={() => {
 				formError = '';
@@ -100,7 +187,11 @@
 			}}
 		/>
 		<Button type="submit" size="lg" class="h-11 shrink-0" disabled={!valid || posting}>
-			{posting ? 'Wünsche …' : 'Wünschen'}
+			{#if forMe}
+				{posting ? 'Wünsche …' : 'Wünschen'}
+			{:else}
+				{posting ? 'Notiere …' : 'Notieren'}
+			{/if}
 		</Button>
 	</div>
 	<Textarea
@@ -116,7 +207,13 @@
 		}}
 	/>
 	<div id="wunsch-hinweis" class="text-muted-foreground mt-2 flex items-center gap-2 text-xs">
-		<p class="min-w-0 flex-1">Alle anderen sehen deinen Wunsch — du selbst nicht mehr.</p>
+		<p class="min-w-0 flex-1">
+			{#if forMe}
+				Alle anderen sehen deinen Wunsch — du selbst nicht mehr.
+			{:else}
+				Du und die anderen sehen die Idee bei {targetName} — {targetName} selbst nicht.
+			{/if}
+		</p>
 		{#if wishes.mine !== null}
 			<!-- Die Zahl ist alles, was der Server ueber die eigene Liste herausgibt. -->
 			<Badge
@@ -154,9 +251,7 @@
 	<div class="px-3 pt-3">
 		<Alert.Root>
 			<GiftIcon class="size-4" />
-			<Alert.Description>
-				„{posted}“ ist notiert und für dich ab jetzt unsichtbar.
-			</Alert.Description>
+			<Alert.Description>{posted}</Alert.Description>
 			<Alert.Action>
 				<Button
 					variant="ghost"
@@ -220,6 +315,11 @@
 					<ul class="divide-y">
 						{#each group.items as wish (wish.id)}
 							{@const when = formatWhen(wish.created)}
+							<!-- Leerer `author` (Admin-UI) zaehlt als eigener Wunsch, wie im Hook. -->
+							{@const idea = wish.author && wish.author !== wish.wisher}
+							{@const ideaBy =
+								wish.author === me ? 'Deine Idee' : `Idee von ${userLabel(wish.expand?.author) || 'jemandem'}`}
+							{@const meta = [when, idea ? ideaBy : ''].filter(Boolean).join(' · ')}
 							<li class="px-3 py-2.5">
 								<p class="break-words">{wish.text}</p>
 								{#if wish.note}
@@ -227,8 +327,8 @@
 										{wish.note}
 									</p>
 								{/if}
-								{#if when}
-									<span class="text-muted-foreground block text-xs">{when}</span>
+								{#if meta}
+									<span class="text-muted-foreground block text-xs">{meta}</span>
 								{/if}
 							</li>
 						{/each}

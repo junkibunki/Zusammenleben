@@ -6,12 +6,16 @@ import { households } from './households.svelte.js';
 // Was hier auffaellig fehlt: ein Filter auf "nicht meine". Den braucht es
 // nicht -- die API-Rules der Collection liefern die eigenen Wuensche gar nicht
 // aus, auch nicht ueber Realtime. Deshalb wandert auch der Rueckgabewert von
-// `create()` bewusst *nicht* in `wishes.items`.
+// `create()` bei einem eigenen Wunsch bewusst *nicht* in `wishes.items`.
+//
+// `wisher` ist, fuer wen ein Wunsch ist; `author`, wer ihn notiert hat
+// (Migration 1790773200). Weichen beide ab, ist es eine Idee fuer jemand
+// anderen -- sichtbar fuer alle ausser `wisher`.
 const COLLECTION = 'wishes';
 
 // Ohne expand steht in `wisher` nur die Record-ID statt des Namens -- und ohne
 // den Namen ist ein Wunschzettel wertlos.
-const EXPAND = 'wisher';
+const EXPAND = 'wisher,author';
 
 /** Maximale Laenge von `text` -- muss mit der Migration uebereinstimmen. */
 export const WISH_MAX = 200;
@@ -111,11 +115,13 @@ export function syncWishes(householdId) {
 }
 
 /**
- * Wunsch anlegen. Der eigene Wunsch taucht danach nirgends auf -- weder in
- * `wishes.items` noch beim naechsten Laden. Wirft bei einem Fehler weiter; die
- * Seite entscheidet, was sie anzeigt (und behaelt den Entwurf).
+ * Wunsch anlegen -- fuer sich selbst (`forUser` leer oder die eigene ID) oder
+ * als Idee fuer ein anderes Mitglied des Haushalts. Der eigene Wunsch taucht
+ * danach nirgends auf -- weder in `wishes.items` noch beim naechsten Laden; die
+ * Idee fuer jemand anderen steht sofort in dessen Block. Wirft bei einem Fehler
+ * weiter; die Seite entscheidet, was sie anzeigt (und behaelt den Entwurf).
  */
-export async function addWish(text, note = '') {
+export async function addWish(text, note = '', forUser = '') {
 	const trimmed = text.trim();
 	if (!trimmed) return null;
 
@@ -123,22 +129,33 @@ export async function addWish(text, note = '') {
 	// Ohne eigene ID wuerde die CreateRule abweisen, und der Nutzer saehe das
 	// englische „Failed to create record." des SDK statt eines Grundes.
 	if (!me) throw new Error('Nicht angemeldet.');
+	const wisher = forUser || me;
 
-	// `wisher` muss mit -- die CreateRule verlangt `wisher = @request.auth.id`,
-	// und sie laeuft vor dem Hook, kann das Feld also nicht von ihm bekommen
-	// (docs/pitfalls/pocketbase-hooks.md). Luegen bringt nichts: genau diese
-	// Rule weist jeden anderen Wert ab.
-	const record = await pb.collection(COLLECTION).create({
-		text: trimmed,
-		note: note.trim(),
-		wisher: me,
-		household: households.activeId
-	});
+	// `wisher` und `author` muessen mit -- die CreateRule verlangt
+	// `author = @request.auth.id` und fuer `wisher` sich selbst oder ein
+	// laufendes Mitglied, und sie laeuft vor dem Hook, kann die Felder also
+	// nicht von ihm bekommen (docs/pitfalls/pocketbase-hooks.md).
+	const record = await pb.collection(COLLECTION).create(
+		{
+			text: trimmed,
+			note: note.trim(),
+			wisher,
+			author: me,
+			household: households.activeId
+		},
+		{ expand: EXPAND }
+	);
 
-	// Von hier an ist der Wunsch fuer den Wuenschenden weg -- die Zahl ist das
-	// Einzige, was von ihm bleibt. Hochzaehlen statt neu zu laden: der Create
-	// ist gerade durchgelaufen, die Zahl kann nur um eins hoeher sein.
-	if (typeof wishes.mine === 'number') wishes.mine += 1;
+	if (wisher === me) {
+		// Von hier an ist der Wunsch fuer den Wuenschenden weg -- die Zahl ist das
+		// Einzige, was von ihm bleibt. Hochzaehlen statt neu zu laden: der Create
+		// ist gerade durchgelaufen, die Zahl kann nur um eins hoeher sein.
+		if (typeof wishes.mine === 'number') wishes.mine += 1;
+	} else if (record.household === loadedFor) {
+		// Das Realtime-Event fuer denselben Record kommt ebenfalls -- deshalb
+		// nur einfuegen, wenn er noch nicht da ist.
+		if (!wishes.items.some((x) => x.id === record.id)) wishes.items.unshift(record);
+	}
 
 	return record;
 }
@@ -158,13 +175,17 @@ export async function addWish(text, note = '') {
  * ist nicht selten: bei einem Dutzend paralleler Creates ging etwa jeder
  * zweite ueber den Index. Er kennt den vorhandenen Wortlaut nicht, deshalb die
  * kuerzere Meldung.
+ *
+ * `own` = false fuer eine Idee fuer jemand anderen: dort steht der Doppelte
+ * nicht auf der *eigenen* Liste.
  */
-export function wishErrorMessage(err) {
+export function wishErrorMessage(err, own = true) {
 	const data = err?.response?.data ?? {};
 	if (data.text?.message) return data.text.message;
 
-	const clash = data.text_norm?.code ?? data.wisher?.code ?? '';
-	if (clash.includes('not_unique')) return 'Das steht schon auf deiner Liste.';
+	const clash = data.text_norm?.code ?? data.wisher?.code ?? data.author?.code ?? '';
+	if (clash.includes('not_unique'))
+		return own ? 'Das steht schon auf deiner Liste.' : 'Das steht schon auf der Liste.';
 
 	// Ueber das Formular nicht erreichbar (das Textarea begrenzt selbst), aber der
 	// einzige Grund, aus dem der Server `note` beanstanden kann.
