@@ -31,6 +31,12 @@ Richtig: `f.type() === 'select'`. Den Typ eines Feldes ändert PocketBase nie �
 neues Feld (mit eigener `id`) daneben, per SQL umkopieren, altes entfernen
 (`1789477200`: `items.category` select → Relation).
 
+**Eine Rule ist in der JS-VM kein JS-String.** Symptom: `migrate down` meldet „Reverted",
+die Rule steht aber unverändert da. Ursache: `collection.viewRule` ist ein Go-`*string`,
+`collection.viewRule !== 'literal'` ist deshalb still *immer* wahr (und `===` immer
+falsch). String-Methoden wie `indexOf` funktionieren dagegen. Vor einem Vergleich
+`String(collection.viewRule ?? '')` (`1790859600`).
+
 **Ein Feld ändern statt anlegen:** `fields.getByName(…)` liefert eine echte Referenz,
 keine Kopie — mutieren und `app.save(collection)` genügt (so setzt `1756000003` die
 `thumbs` des `avatar`-Feldes). Der von PocketBase selbst generierte
@@ -80,7 +86,17 @@ nicht; `@collection.training_posts.kudos.id ?= id` (oder `kudos:each ?= id`) sch
 einer Einfach-Relation genügt das Feld allein (`@collection.ideas.author ?= id`). Gemessen
 an `1789909201`: A ruft B ab, der bei A auf die Schulter geklopft hat → 404 bzw. 200.
 
+**Jeder `@collection`-Verweis in einer Rule ist ein JOIN, und die multiplizieren sich.**
+Symptom: ein Request ohne `expand` braucht 40 ms, mit `expand=added_by` ~2 s, mit zwei
+User-Relationen ~4 s — und es wird mit jedem neuen Datensatz in den referenzierten
+Collections langsamer. Ursache war die ViewRule von `users`, an die über Monate jede neue
+Funktion ein `|| @collection.…` gehängt hatte (zuletzt ~20 Verweise); `expand` prüft sie
+für jeden Namen. Darum `users.viewRule = '@request.auth.id != ""'` (`1790859600`). Neue
+Sichtbarkeit nicht wieder als `@collection`-Suffix anhängen; vorher mit und ohne
+`expand` messen.
+
 `expand` kommt leer zurück, wenn die View-Rule der Zielcollection zumacht — Details in
 [Realtime / PocketBase-SDK](../../CLAUDE.md#realtime--pocketbase-sdk). Für `users`
-öffnet `1756000002` die ViewRule, `1756000004` die ListRule (die Seite „Bewohner"
-braucht sie, sonst liefert `getFullList('users')` nur den eigenen Datensatz).
+öffnet `1790859600` die ViewRule für alle Angemeldeten. Die ListRule (die Seite
+„Bewohner" braucht sie, sonst liefert `getFullList('users')` nur den eigenen Datensatz)
+lässt Mitbewohner durch (`1789304400`) und wer Training eingeschaltet hat (`1790254800`).
